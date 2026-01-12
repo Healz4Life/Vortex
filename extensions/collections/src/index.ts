@@ -498,7 +498,8 @@ function generateCollectionOptions(mods: { [modId: string]: types.IMod })
     : Array<{ label: string, value: string }> {
   return Object.values(mods)
     .filter(mod => mod.type === MOD_TYPE)
-    .map(mod => ({ label: util.renderModName(mod), value: mod.id }));
+    //.map(mod => ({ label: util.renderModName(mod), value: mod.id }));
+    .map(mod => ({ label: util.renderModName(mod), value: util.renderModName(mod) }));
 }
 
 async function updateMeta(api: types.IExtensionApi, collectionId?: string) {
@@ -729,7 +730,7 @@ function register(context: types.IExtensionContext,
     calc: (mod: types.IMod) => {
       const collections = collectionsMap()[mod.id];
       return (collections === undefined)
-        ? '' : collections.map(iter => iter.id);
+        ? '' : collections.map(iter => util.renderModName(iter));
     },
     externalData: (onChanged: () => void) => {
       collectionChangedCB = onChanged;
