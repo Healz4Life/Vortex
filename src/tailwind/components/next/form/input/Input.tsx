@@ -6,9 +6,11 @@
  */
 
 import * as React from "react";
-import { InputHTMLAttributes, Ref, useState } from "react";
+import type { InputHTMLAttributes, Ref } from "react";
+import { useState } from "react";
 
-import { BaseFormFieldProps, FormField } from "../formfield";
+import type { BaseFormFieldProps } from "../formfield";
+import { FormField } from "../formfield";
 import { joinClasses } from "../../utils";
 
 export interface InputProps
@@ -83,21 +85,21 @@ export const Input = ({
         aria-invalid={!!errorMessage || undefined}
         className={joinClasses(
           [
-            "tw:text-neutral-strong tw:typography-body-lg tw:placeholder:text-neutral-subdued tw:min-h-9 tw:rounded tw:border tw:px-3 tw:transition-colors",
+            "text-neutral-strong typography-body-lg placeholder:text-neutral-subdued min-h-9 rounded border px-3 transition-colors",
             ...(typeof errorMessage === "string"
-              ? ["tw:bg-surface-translucent-mid tw:border-danger-strong"]
+              ? ["bg-surface-translucent-mid border-danger-strong"]
               : [
-                  "tw:bg-translucent-dark-400 tw:border-stroke-neutral-translucent-subdued",
+                  "bg-translucent-dark-400 border-stroke-subdued",
                   ...(readOnly || disabled
                     ? [""]
                     : [
-                        "tw:focus:bg-surface-translucent-mid tw:focus:border-stroke-neutral-translucent-strong",
-                        "tw:hover:bg-surface-translucent-low tw:hover:border-stroke-neutral-translucent-moderate",
+                        "focus:bg-surface-translucent-mid focus:border-stroke-strong",
+                        "hover:bg-surface-translucent-low hover:border-stroke-moderate",
                       ]),
                 ]),
             className,
           ],
-          { "tw:opacity-40 tw:outline-none": readOnly || disabled },
+          { "opacity-40 outline-none": readOnly || disabled },
         )}
         defaultValue={defaultValue}
         disabled={disabled}

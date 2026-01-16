@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   forgetExtension,
   removeExtension,
@@ -8,27 +7,29 @@ import {
 import {
   addNotification,
   closeDialog,
-  DialogActions,
-  DialogType,
   dismissNotification,
   dismissAllNotifications,
-  IDialogContent,
   showDialog,
 } from "../actions/notifications";
+import type {
+  DialogActions,
+  DialogType,
+  IDialogContent,
+} from "../actions/notifications.ts";
 import { suppressNotification } from "../actions/notificationSettings";
 import { setExtensionLoadFailures } from "../actions/session";
 
 import { setOptionalExtensions } from "../extensions/extension_manager/actions";
-import {
+import type {
   IAvailableExtension,
   IExtension,
 } from "../extensions/extension_manager/types";
-import {
+import type {
   IModReference,
   IModRepoId,
 } from "../extensions/mod_management/types/IMod";
-import { ExtensionInit } from "../types/Extension";
-import {
+import type { ExtensionInit } from "../types/Extension";
+import type {
   ArchiveHandlerCreator,
   IArchiveHandler,
   IArchiveOptions,
@@ -45,9 +46,12 @@ import {
   ThunkStore,
   ToolParameterCB,
 } from "../types/IExtensionContext";
-import { ILookupOptions, IModLookupResult } from "../types/IModLookupResult";
-import { INotification } from "../types/INotification";
-import {
+import type {
+  ILookupOptions,
+  IModLookupResult,
+} from "../types/IModLookupResult";
+import type { INotification } from "../types/INotification";
+import type {
   IExtensionLoadFailure,
   IExtensionOptional,
   IExtensionState,
@@ -66,12 +70,14 @@ import {
 } from "./CustomErrors";
 import { disableErrorReport, isOutdated } from "./errorHandling";
 import getVortexPath from "./getVortexPath";
-import { i18n, TString } from "./i18n";
+import type { i18n } from "./i18n";
+import { TString } from "./i18n";
 import lazyRequire from "./lazyRequire";
 import { log } from "./log";
 import { showError } from "./message";
-import { registerSanityCheck, SanityCheck } from "./reduxSanity";
-import ReduxWatcher from "./ReduxWatcher";
+import { registerSanityCheck } from "../store/reduxSanity";
+import type { SanityCheck } from "../store/reduxSanity.ts";
+import ReduxWatcher from "../store/ReduxWatcher";
 import runElevatedCustomTool from "./runElevatedCustomTool";
 import { activeGameId } from "./selectors";
 import { getSafe } from "./storeHelper";
@@ -88,10 +94,10 @@ import {
 } from "./util";
 
 import Promise from "bluebird";
-import { spawn, SpawnOptions } from "child_process";
-import {
-  ipcMain,
-  ipcRenderer,
+import { spawn } from "child_process";
+import type { SpawnOptions } from "child_process";
+import { ipcMain, ipcRenderer } from "electron";
+import type {
   OpenDialogOptions,
   SaveDialogOptions,
   WebContents,
@@ -101,12 +107,12 @@ import * as fs from "fs-extra";
 import * as fuzz from "fuzzball";
 import JsonSocket from "json-socket";
 import * as _ from "lodash";
-import { IHashResult, ILookupResult, IModInfo } from "modmeta-db";
+import type { IHashResult, ILookupResult, IModInfo } from "modmeta-db";
 import type * as modmetaT from "modmeta-db";
 const modmeta = lazyRequire<typeof modmetaT>(() => require("modmeta-db"));
 import * as net from "net";
 import * as path from "path";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 import * as semver from "semver";
 import { generate as shortid } from "shortid";
 import stringFormat from "string-template";
@@ -117,7 +123,13 @@ import { VCREDIST_URL } from "../constants";
 import { fileMD5 } from "vortexmt";
 import * as fsVortex from "../util/fs";
 
-import { toast, ToastOptions } from "react-hot-toast";
+import { toast } from "react-hot-toast";
+import type { ToastOptions } from "react-hot-toast";
+import {
+  getErrorCode,
+  unknownToError,
+  getErrorMessageOrDefault,
+} from "../shared/errors";
 
 export function isExtSame(
   installed: IExtension,
@@ -1047,10 +1059,11 @@ class ExtensionManager {
           fs.unlinkSync(path.join(getVortexPath("temp"), ext));
         });
       } catch (err) {
+        const code = getErrorCode(err);
         // an ENOENT will happen on the first start where the dir doesn't
         // exist yet. No problem
-        if (err.code !== "ENOENT") {
-          log("error", "failed to read disabled extensions", err.message);
+        if (code !== "ENOENT") {
+          log("error", "failed to read disabled extensions", err);
         }
       }
 
@@ -1142,7 +1155,7 @@ class ExtensionManager {
         } catch (err) {
           // Toast rendering failed (e.g., goober styling error during race condition)
           // Fall through to standard notification
-          log("warn", "Failed to show toast notification", err.message);
+          log("warn", "Failed to show toast notification", err);
         }
       }
       if (notification.type === "warning") {
@@ -1429,7 +1442,9 @@ class ExtensionManager {
         } else {
           func(...call.arguments);
         }
-      } catch (err) {
+      } catch (unknownError) {
+        const err = unknownToError(unknownError);
+
         this.mApi.showErrorNotification(
           "Extension failed to initialize. If this isn't an official extension, " +
             "please report the error to the respective author.",
@@ -1453,14 +1468,19 @@ class ExtensionManager {
     );
 
     const reportError = (
-      err: Error,
+      err: unknown,
       call: IInitCall,
       allowReport: boolean = true,
     ) => {
-      log("warn", "failed to call once", {
-        err: err.message,
-        stack: err.stack,
-      });
+      if (err instanceof Error) {
+        log("warn", "failed to call once", {
+          err: err.message,
+          stack: err.stack,
+        });
+      } else {
+        log("warn", "failed to call once", err);
+      }
+
       err["extension"] = call.extension;
       this.mApi.showErrorNotification(
         "Extension failed to initialize. If this isn't an official extension, " +
@@ -1669,7 +1689,7 @@ class ExtensionManager {
           "Failed to connect meta database",
           {
             text: "Please check that there is no other instance of Vortex still running.",
-            message: err.message,
+            message: getErrorMessageOrDefault(err),
           },
           [{ label: "Quit" }, { label: "Retry" }],
         )
@@ -1718,7 +1738,9 @@ class ExtensionManager {
       this.mWatches[key].forEach((cb) => {
         try {
           cb(prevValue, currentValue);
-        } catch (err) {
+        } catch (unknownError) {
+          const err = unknownToError(unknownError);
+
           log("error", "state change handler failed", {
             message: err.message,
             stack1: err.stack,
@@ -1765,13 +1787,15 @@ class ExtensionManager {
         const extProxy = new Proxy(contextProxy, apiProxy);
         ext.initFunc()(extProxy as IExtensionContext);
         apiProxy.enableAPI();
-      } catch (err) {
+      } catch (unknownError) {
         if (!ext.dynamic) {
           // if one of the static extension fails to initialize we should be
           // crashing, otherwise we risk data loss if the user restores a backup
           // and the important reducers aren't loaded
-          throw err;
+          throw unknownError;
         }
+        const err = unknownToError(unknownError);
+
         // make sure we're not calling any of the register calls if the extension
         // isn't fully initialized
         this.mContextProxyHandler.dropCalls(ext.name);
@@ -2125,7 +2149,7 @@ class ExtensionManager {
         .catch((err) => {
           log("info", "failed to calculate hash", {
             path: detail.filePath,
-            error: err.message,
+            error: getErrorMessageOrDefault(err),
           });
           return Promise.resolve();
         });
@@ -2290,14 +2314,14 @@ class ExtensionManager {
           return Promise.reject(err);
         })
         .catch(ProcessCanceled, (err) => {
-          log("debug", "hook canceled start", err.message);
+          log("debug", "hook canceled start", getErrorMessageOrDefault(err));
           return Promise.reject(err);
         })
         .catch((err) => {
           if (err instanceof UserCanceled) {
             log("debug", "start canceled by user");
           } else if (err instanceof ProcessCanceled) {
-            log("debug", "hook canceled start", err.message);
+            log("debug", "hook canceled start", getErrorMessageOrDefault(err));
           } else {
             log("error", "hook failed", err);
           }
@@ -2463,8 +2487,8 @@ class ExtensionManager {
                         const exitCodeHex = code.toString(16);
 
                         const errorMessage = `Failed to run "${sanitizedExecutable}": "${sanitizedLastLine} (${exitCodeHex})"`;
-                        const err: any = new Error(errorMessage);
-                        err.exitCode = code;
+                        const err = new Error(errorMessage);
+                        err["exitCode"] = code;
                         reject(err);
                         return;
                       }
@@ -2504,7 +2528,8 @@ class ExtensionManager {
                   });
                 }
               } catch (err) {
-                if (err.code === "EINVAL") {
+                const code = getErrorCode(err);
+                if (code === "EINVAL") {
                   err["attachLogOnReport"] = true;
                   log("error", "Invalid spawn parameters", {
                     runExe,
@@ -2512,6 +2537,7 @@ class ExtensionManager {
                     options: JSON.stringify(options),
                   });
                 }
+
                 return reject(err);
               }
             }),
@@ -2524,7 +2550,8 @@ class ExtensionManager {
         .catch({ systemCode: 1223 }, () => Promise.reject(new UserCanceled()))
         // Is errno still used ? looks like shellEx call returns systemCode instead
         .catch({ errno: 1223 }, () => Promise.reject(new UserCanceled()))
-        .catch((err) => {
+        .catch((unknownErr) => {
+          const err = unknownToError(unknownErr);
           if (
             err.message
               .toLowerCase()
@@ -2827,12 +2854,17 @@ class ExtensionManager {
             encoding: "utf8",
           }),
         );
-      } catch (error) {
+      } catch (err) {
+        const errorCode = getErrorCode(err);
         const errMessage =
-          error.code === "ENOENT"
+          errorCode === "ENOENT"
             ? "extension has no info.json file"
             : "failed to parse info.json file";
-        log("warn", errMessage, { extensionPath, error: error.message });
+
+        log("warn", errMessage, {
+          extensionPath,
+          error: getErrorMessageOrDefault(err),
+        });
       }
 
       const pathName = path.basename(extensionPath);
@@ -2889,7 +2921,7 @@ class ExtensionManager {
       } catch (err) {
         log("warn", "extension path missing and can't be created", {
           path: extension.path,
-          error: err.message,
+          error: getErrorMessageOrDefault(err),
         });
       }
       return [];
@@ -2954,7 +2986,8 @@ class ExtensionManager {
               prev[ext.name] = ext;
             }
           }
-        } catch (err) {
+        } catch (unknownError) {
+          const err = unknownToError(unknownError);
           log("warn", "failed to load dynamic extension", {
             name,
             error: err.message,

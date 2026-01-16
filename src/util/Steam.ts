@@ -8,7 +8,7 @@ import * as fsOG from "fs/promises";
 import * as path from "path";
 import { parse } from "simple-vdf";
 import * as winapi from "winapi-bindings";
-import {
+import type {
   ICustomExecutionInfo,
   IExecInfo,
   IGameStore,
@@ -17,9 +17,10 @@ import {
 
 import opn from "./opn";
 
-import { IExtensionApi } from "../types/IExtensionContext";
+import type { IExtensionApi } from "../types/IExtensionContext";
 import { GameEntryNotFound } from "../types/IGameStore";
 import getVortexPath from "./getVortexPath";
+import { getErrorMessageOrDefault } from "../shared/errors";
 
 const STORE_ID = "steam";
 const STORE_NAME = "Steam";
@@ -67,7 +68,7 @@ class Steam implements IGameStore {
         );
         this.mBaseFolder = Promise.resolve(steamPath.value as string);
       } catch (err) {
-        log("info", "steam not found", { error: err.message });
+        log("info", "steam not found", err);
         this.mBaseFolder = Promise.resolve(undefined);
       }
     } else {
@@ -108,7 +109,7 @@ class Steam implements IGameStore {
         opn(posix).catch((err) => Promise.resolve()),
       );
     }
-    const info = !!appInfo.steamAppId ? appInfo.steamAppId.toString() : appInfo;
+    const info = appInfo.steamAppId ? appInfo.steamAppId.toString() : appInfo;
     return this.getExecInfo(info).then((execInfo) =>
       api.runExecutable(execInfo.execPath, execInfo.arguments, {
         cwd: path.dirname(execInfo.execPath),
@@ -274,7 +275,8 @@ class Steam implements IGameStore {
           //  it only holds the path to the alternate steam libraries (the ones that aren't
           //  part of the base Steam installation folder)
           log("warn", "failed to read steam library folders file", err);
-          return ["EPERM", "ENOENT"].includes(err.code)
+          const code = getErrorMessageOrDefault(err);
+          return ["EPERM", "ENOENT"].includes(code)
             ? Promise.resolve(steamPaths)
             : Promise.reject(err);
         });
@@ -312,7 +314,7 @@ class Steam implements IGameStore {
                 } catch (err) {
                   log("warn", "failed to parse steam manifest", {
                     name,
-                    error: err.message,
+                    error: getErrorMessageOrDefault(err),
                   });
                   return undefined;
                 }
@@ -349,7 +351,7 @@ class Steam implements IGameStore {
                 } catch (err) {
                   log("warn", "failed to parse steam manifest", {
                     name,
-                    error: err.message,
+                    error: getErrorMessageOrDefault(err),
                   });
                   return undefined;
                 }
@@ -359,13 +361,15 @@ class Steam implements IGameStore {
           .catch({ code: "ENOENT" }, (err: any) => {
             // no biggy, this can happen for example if the steam library is on a removable medium
             // which is currently removed
-            log("info", "Steam library not found", { error: err.message });
+            log("info", "Steam library not found", {
+              error: getErrorMessageOrDefault(err),
+            });
             return undefined;
           })
           .catch((err) => {
             log("warn", "Failed to read steam library", {
               path: steamPath,
-              error: err.message,
+              error: getErrorMessageOrDefault(err),
             });
           });
       })

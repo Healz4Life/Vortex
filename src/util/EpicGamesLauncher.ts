@@ -8,12 +8,8 @@ import { getSafe } from "./storeHelper";
 
 import opn from "./opn";
 
-import {
-  GameEntryNotFound,
-  IExtensionApi,
-  IGameStore,
-  IGameStoreEntry,
-} from "../types/api";
+import type { IExtensionApi, IGameStore, IGameStoreEntry } from "../types/api";
+import { GameEntryNotFound } from "../types/api";
 import lazyRequire from "./lazyRequire";
 
 const winapi: typeof winapiT = lazyRequire(() => require("winapi-bindings"));
@@ -47,7 +43,7 @@ class EpicGamesLauncher implements IGameStore {
         );
         this.mDataPath = Promise.resolve(epicDataPath.value as string);
       } catch (err) {
-        log("info", "Epic games launcher not found", { error: err.message });
+        log("info", "Epic games launcher not found", err);
         this.mDataPath = Promise.resolve(undefined);
       }
     } else {
@@ -159,12 +155,12 @@ class EpicGamesLauncher implements IGameStore {
         this.mLauncherExecPath = val.toString().split(",")[0];
         return Promise.resolve(this.mLauncherExecPath);
       } catch (err) {
-        log("info", "Epic games launcher not found", { error: err.message });
+        log("info", "Epic games launcher not found", err);
         return Promise.resolve(undefined);
       }
     };
 
-    return !!this.mLauncherExecPath
+    return this.mLauncherExecPath
       ? Promise.resolve(this.mLauncherExecPath)
       : getExecPath();
   }

@@ -12,17 +12,25 @@ import IconBar from "../controls/IconBar";
 import ProgressBar from "../controls/ProgressBar";
 import Spinner from "../controls/Spinner";
 import { Button, NavItem } from "../controls/TooltipControls";
-import { IActionDefinition } from "../../types/IActionDefinition";
-import { IComponentContext } from "../../types/IComponentContext";
-import { IExtensionApi, IMainPageOptions } from "../../types/IExtensionContext";
-import { II18NProps } from "../../types/II18NProps";
-import { IMainPage } from "../../types/IMainPage";
-import { IModifiers } from "../../types/IModifiers";
-import { INotification } from "../../types/INotification";
-import { IProfile, IProgress, IState, IUIBlocker } from "../../types/IState";
+import type { IActionDefinition } from "../../types/IActionDefinition";
+import type { IComponentContext } from "../../types/IComponentContext";
+import type {
+  IExtensionApi,
+  IMainPageOptions,
+} from "../../types/IExtensionContext";
+import type { II18NProps } from "../../types/II18NProps";
+import type { IMainPage } from "../../types/IMainPage";
+import type { IModifiers } from "../../types/IModifiers";
+import type { INotification } from "../../types/INotification";
+import type {
+  IProfile,
+  IProgress,
+  IState,
+  IUIBlocker,
+} from "../../types/IState";
 import { connect, extend } from "../controls/ComponentEx";
-import { IRegisteredExtension } from "../../util/ExtensionManager";
-import { TFunction } from "../../util/i18n";
+import type { IRegisteredExtension } from "../../util/ExtensionManager";
+import type { TFunction } from "../../util/i18n";
 import { log } from "../../util/log";
 import { createQueue, MutexProvider } from "../../util/MutexContext";
 import startupSettings from "../../util/startupSettings";
@@ -51,10 +59,11 @@ import * as React from "react";
 import { Button as ReactButton, Nav } from "react-bootstrap";
 // tslint:disable-next-line:no-submodule-imports
 import { addStyle } from "react-bootstrap/lib/utils/bootstrapUtils";
-import * as Redux from "redux";
-import { ThunkDispatch } from "redux-thunk";
+import type * as Redux from "redux";
+import type { ThunkDispatch } from "redux-thunk";
 
 import { Toaster } from "react-hot-toast"; // at top
+import { getErrorMessageOrDefault } from "../../shared/errors";
 
 addStyle(ReactButton, "secondary");
 addStyle(ReactButton, "ad");
@@ -407,7 +416,7 @@ export class MainWindow extends React.Component<IProps, IMainWindowState> {
 
   private renderToolbar(switchingProfile: boolean) {
     const { t, customTitlebar, updateChannel, version } = this.props;
-    let parsedVersion = semver.parse(version);
+    const parsedVersion = semver.parse(version);
     const prerelease = parsedVersion?.prerelease[0] ?? "stable";
     const updateChannelClassName =
       "toolbar-version-container toolbar-version-" + prerelease;
@@ -558,7 +567,7 @@ export class MainWindow extends React.Component<IProps, IMainWindowState> {
         return page.group === key && page.visible();
       } catch (err) {
         log("error", "Failed to determine page visibility", {
-          error: err.message,
+          error: getErrorMessageOrDefault(err),
           page: page.id,
         });
         return false;

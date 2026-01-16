@@ -1,10 +1,10 @@
-import {
+import type {
   IExtensionApi,
   IExtensionContext,
 } from "../../types/IExtensionContext";
-import { IPresetStep, IPresetStepInstallMod } from "../../types/IPreset";
-import { IState } from "../../types/IState";
-import { ITestResult } from "../../types/ITestResult";
+import type { IPresetStep, IPresetStepInstallMod } from "../../types/IPreset";
+import type { IState } from "../../types/IState";
+import type { ITestResult } from "../../types/ITestResult";
 import { getApplication } from "../../util/application";
 import {
   DataInvalid,
@@ -13,10 +13,11 @@ import {
 } from "../../util/CustomErrors";
 import Debouncer from "../../util/Debouncer";
 import * as fs from "../../util/fs";
-import getNormalizeFunc, { Normalize } from "../../util/getNormalizeFunc";
+import type { Normalize } from "../../util/getNormalizeFunc";
+import getNormalizeFunc from "../../util/getNormalizeFunc";
 import { log } from "../../util/log";
 import presetManager from "../../util/PresetManager";
-import ReduxProp from "../../util/ReduxProp";
+import ReduxProp from "../../renderer/ReduxProp";
 import * as selectors from "../../util/selectors";
 import { getSafe } from "../../util/storeHelper";
 import { batchDispatch, sum, toPromise, truthy } from "../../util/util";
@@ -38,27 +39,29 @@ import { setTransferDownloads } from "./actions/transactions";
 import { settingsReducer } from "./reducers/settings";
 import { stateReducer } from "./reducers/state";
 import { transactionsReducer } from "./reducers/transactions";
-import { DownloadState, IDownload } from "./types/IDownload";
-import { IProtocolHandlers, IResolvedURL } from "./types/ProtocolHandlers";
+import type { DownloadState, IDownload } from "./types/IDownload";
+import type { IProtocolHandlers, IResolvedURL } from "./types/ProtocolHandlers";
 import { ensureDownloadsDirectory } from "./util/downloadDirectory";
 import getDownloadGames from "./util/getDownloadGames";
 import { finalizeDownload } from "./util/postprocessDownload";
 import queryInfo from "./util/queryDLInfo";
-import DownloadView, { IDownloadViewProps } from "./views/DownloadView";
+import type { IDownloadViewProps } from "./views/DownloadView";
+import DownloadView from "./views/DownloadView";
 import Settings from "./views/Settings";
 import ShutdownButton from "./views/ShutdownButton";
 import SpeedOMeter from "./views/SpeedOMeter";
 
 import downloadAttributes from "./downloadAttributes";
-import DownloadManager from "./DownloadManager";
-import observe, { DownloadObserver } from "./DownloadObserver";
+import type DownloadManager from "./DownloadManager";
+import type { DownloadObserver } from "./DownloadObserver";
+import type observe from "./DownloadObserver";
 
 import type * as RemoteT from "@electron/remote";
 import Promise from "bluebird";
 import * as _ from "lodash";
-import Zip = require("node-7z");
+import Zip from "node-7z";
 import * as path from "path";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 import { generate as shortid } from "shortid";
 import { fileMD5 } from "vortexmt";
 import winapi from "winapi-bindings";
@@ -72,6 +75,7 @@ import {
   convertGameIdReverse,
 } from "../nexus_integration/util/convertGameId";
 import extendAPI from "./util/extendApi";
+import { unknownToError } from "../../shared/errors";
 
 const remote = lazyRequire<typeof RemoteT>(() => require("@electron/remote"));
 
@@ -1306,7 +1310,7 @@ function init(context: IExtensionContextExt): boolean {
       (dlIds: string[], cb?: (err?: Error) => void) => {
         queryInfo(context.api, dlIds, false)
           .then(() => cb?.())
-          .catch((err) => cb?.(err));
+          .catch((err) => cb?.(unknownToError(err)));
       },
     );
 

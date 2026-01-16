@@ -2,12 +2,15 @@ import Bluebird from "bluebird";
 import * as https from "https";
 import * as _ from "lodash";
 import * as path from "path";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 import * as url from "url";
 
 import { addNotification } from "../../actions/notifications";
-import { IExtensionContext, ThunkStore } from "../../types/IExtensionContext";
-import { IState } from "../../types/IState";
+import type {
+  IExtensionContext,
+  ThunkStore,
+} from "../../types/IExtensionContext";
+import type { IState } from "../../types/IState";
 import { getApplication } from "../../util/application";
 import { DataInvalid } from "../../util/CustomErrors";
 import * as fs from "../../util/fs";
@@ -27,9 +30,11 @@ import {
   setSuppressSurvey,
 } from "./actions";
 import AnnouncementDashlet from "./AnnouncementDashlet";
-import { IAnnouncement, ISurveyInstance, ParserError } from "./types";
+import type { IAnnouncement, ISurveyInstance } from "./types";
+import { ParserError } from "./types";
 
 import { matchesGameMode, matchesVersion } from "./util";
+import { getErrorMessageOrDefault } from "../../shared/errors";
 
 const ANNOUNCEMENT_LINK =
   "https://raw.githubusercontent.com/Nexus-Mods/Vortex-Backend/main/out/announcements.json";
@@ -73,7 +78,12 @@ function getHTTPData<T>(link: string): Bluebird<T[]> {
               resolve(parsed);
             } catch (err) {
               reject(
-                new ParserError(res.statusCode, err.message, link, output),
+                new ParserError(
+                  res.statusCode,
+                  getErrorMessageOrDefault(err),
+                  link,
+                  output,
+                ),
               );
             }
           });

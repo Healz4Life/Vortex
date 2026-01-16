@@ -1,13 +1,15 @@
-/* eslint-disable */
-import { IExtensionApi } from "../../types/IExtensionContext";
+import type { IExtensionApi } from "../../types/IExtensionContext";
 import * as fs from "../../util/fs";
-import getNormalizeFunc, { Normalize } from "../../util/getNormalizeFunc";
+import getNormalizeFunc, { type Normalize } from "../../util/getNormalizeFunc";
 import { log } from "../../util/log";
 import { truthy } from "../../util/util";
 
-import BlacklistSet from "./util/BlacklistSet";
-import { IDeployedFile, IDeploymentMethod } from "./types/IDeploymentMethod";
-import { IMod } from "./types/IMod";
+import type BlacklistSet from "./util/BlacklistSet";
+import type {
+  IDeployedFile,
+  IDeploymentMethod,
+} from "./types/IDeploymentMethod";
+import type { IMod } from "./types/IMod";
 import renderModName from "./util/modName";
 
 import { MERGED_PATH } from "./modMerging";
@@ -15,6 +17,7 @@ import { MERGED_PATH } from "./modMerging";
 import Promise from "bluebird";
 import * as path from "path";
 import { UserCanceled } from "../../util/CustomErrors";
+import { getErrorMessageOrDefault } from "../../shared/errors";
 
 function ensureWritable(api: IExtensionApi, modPath: string): Promise<void> {
   return fs.ensureDirWritableAsync(modPath, () =>
@@ -108,7 +111,7 @@ function deployMods(
           );
         } catch (err) {
           log("error", "failed to deploy mod", {
-            err: err.message,
+            err: getErrorMessageOrDefault(err),
             id: mod.id,
           });
         }

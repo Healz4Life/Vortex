@@ -1,28 +1,29 @@
-import PromiseBB from "bluebird";
+import type PromiseBB from "bluebird";
 import * as path from "path";
 import * as React from "react";
 import { Button, ControlLabel, FormGroup, HelpBlock } from "react-bootstrap";
 import { withTranslation } from "react-i18next";
 import { connect } from "react-redux";
-import * as Redux from "redux";
-import { ThunkDispatch } from "redux-thunk";
-import {
+import type * as Redux from "redux";
+import type { ThunkDispatch } from "redux-thunk";
+import type {
   DialogActions,
   DialogType,
   ICheckbox,
   IDialogContent,
   IDialogResult,
-  showDialog,
 } from "../../actions";
-import { IState } from "../../types/IState";
+import { showDialog } from "../../actions";
+import type { IState } from "../../types/IState";
 import { getApplication } from "../../util/application";
 import { ComponentEx } from "../../renderer/controls/ComponentEx";
 import * as fs from "../../util/fs";
 import getVortexPath from "../../util/getVortexPath";
 import { log } from "../../util/log";
 import relativeTime from "../../util/relativeTime";
-import { FULL_BACKUP_PATH } from "../../util/store";
+import { FULL_BACKUP_PATH } from "../../store/store";
 import { spawnSelf } from "../../util/util";
+import { getErrorCode, getErrorMessageOrDefault } from "../../shared/errors";
 
 export interface IBaseProps {
   onCreateManualBackup: () => void;
@@ -204,13 +205,15 @@ class Settings extends ComponentEx<IProps, {}> {
         }
       }
     } catch (err) {
+      const code = getErrorCode(err);
       log("error", "failed to list state backups");
       await onShowDialog(
         "error",
         "There are no backups to restore",
         {
           text: "Found no backup to restore",
-          message: err.code === "ENOENT" ? undefined : err.message,
+          message:
+            code === "ENOENT" ? undefined : getErrorMessageOrDefault(err),
         },
         [{ label: "Close" }],
       );

@@ -1,22 +1,20 @@
-/* eslint-disable */
-
 import * as _ from "lodash";
 
 import * as path from "path";
 
 import { setValidationResult } from "./actions/session";
 
-import { IExtensionContext } from "../../types/IExtensionContext";
+import type { IExtensionContext } from "../../types/IExtensionContext";
 import {
-  ILoadOrderGameInfo,
-  ILoadOrderGameInfoExt,
-  IValidationResult,
-  LoadOrder,
+  type ILoadOrderGameInfo,
+  type ILoadOrderGameInfoExt,
+  type IValidationResult,
+  type LoadOrder,
   LoadOrderValidationError,
-  ILoadOrderEntryExt,
+  type ILoadOrderEntryExt,
 } from "./types/types";
 
-import { ICollection } from "./types/collections";
+import type { ICollection } from "./types/collections";
 
 import { generate, Interface, parser } from "./collections/loadOrder";
 
@@ -25,7 +23,7 @@ import FileBasedLoadOrderPage from "./views/FileBasedLoadOrderPage";
 import { modLoadOrderReducer } from "./reducers/loadOrder";
 import { sessionReducer } from "./reducers/session";
 
-import * as types from "../../types/api";
+import type * as types from "../../types/api";
 import * as util from "../../util/api";
 import * as selectors from "../../util/selectors";
 
@@ -44,6 +42,7 @@ import * as fs from "../../util/fs";
 import { currentGameMods, currentLoadOrderForProfile } from "./selectors";
 
 import UpdateSet from "./UpdateSet";
+import { unknownToError } from "../../shared/errors";
 
 interface IDeployment {
   [modType: string]: types.IDeployedFile[];
@@ -119,7 +118,7 @@ async function genLoadOrderChange(
   const prevLO: LoadOrder = Array.isArray(oldState[profile.id])
     ? oldState[profile.id]
     : [];
-  let loadOrder: LoadOrder = Array.isArray(newState[profile.id])
+  const loadOrder: LoadOrder = Array.isArray(newState[profile.id])
     ? newState[profile.id]
     : [];
   const prevIds = prevLO.map((lo) => lo.id);
@@ -169,7 +168,7 @@ async function genLoadOrderChange(
     try {
       await validateLoadOrder(api, profile, loadOrder);
     } catch (err) {
-      return errorHandler(api, gameEntry.gameId, err);
+      return errorHandler(api, gameEntry.gameId, unknownToError(err));
     }
   }
 }
@@ -308,7 +307,7 @@ async function applyNewLoadOrder(
     await gameEntry.serializeLoadOrder(newLO, prev);
     await validateLoadOrder(api, profile, newLO);
   } catch (err) {
-    return errorHandler(api, gameEntry.gameId, err);
+    return errorHandler(api, gameEntry.gameId, unknownToError(err));
   }
 
   return;
@@ -660,7 +659,7 @@ async function onStartUp(
     }
     return Promise.resolve(loadOrder);
   } catch (err) {
-    return errorHandler(api, gameId, err).then(() =>
+    return errorHandler(api, gameId, unknownToError(err)).then(() =>
       err instanceof LoadOrderValidationError
         ? Promise.reject(err)
         : Promise.resolve(undefined),

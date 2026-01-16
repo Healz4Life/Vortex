@@ -1,13 +1,23 @@
-import { IPersistor, PersistorKey } from "../types/IExtensionContext";
+import type { IPersistor, PersistorKey } from "../types/IExtensionContext";
+import { unknownToError } from "../shared/errors";
 import { terminate } from "../util/errorHandling";
 import { log } from "../util/log";
 
 import Promise from "bluebird";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 
-function insert(target: any, key: string[], value: any, hive: string) {
+function isObject(state: unknown): state is object {
+  return state !== null && typeof state === "object" && !Array.isArray(state);
+}
+
+function insertValueAtLeaf<T, V>(
+  target: T,
+  key: string[],
+  value: V,
+  hive: string,
+) {
   try {
-    key.reduce((prev, keySegment: string, idx: number, fullKey: string[]) => {
+    key.reduce<unknown>((prev, keySegment, idx, fullKey) => {
       if (idx === fullKey.length - 1) {
         // previously we allowed this to cause a crash so we'd get the error reports,
         // but since that doesn't give the user any way to fix the issue, we now
@@ -26,7 +36,7 @@ function insert(target: any, key: string[], value: any, hive: string) {
       } else {
         // Ideally there wouldn't be any null values in the state but with extensions
         // we can't really ensure that
-        if (prev[keySegment] === undefined || prev[keySegment] === null) {
+        if (!prev[keySegment]) {
           prev[keySegment] = {};
         }
         return prev[keySegment];
@@ -36,7 +46,10 @@ function insert(target: any, key: string[], value: any, hive: string) {
     const newErr = new Error(
       `Failed to load application state ${hive}.${key.join(".")}`,
     );
-    newErr.stack = err.stack;
+    if (err instanceof Error) {
+      newErr.stack = err.stack;
+    }
+
     throw newErr;
   }
 }
@@ -66,7 +79,7 @@ class ReduxPersistor<T> {
   }
 
   private resetData(hive: string, persistor: IPersistor): Promise<void> {
-    const kvProm: Promise<Array<{ key: PersistorKey; value: string }>> =
+    const kvProm: Promise<Array<{ key: PersistorKey; value: unknown }>> =
       persistor.getAllKVs !== undefined
         ? persistor
             .getAllKVs()
@@ -81,7 +94,8 @@ class ReduxPersistor<T> {
                 persistor
                   .getItem(key)
                   .then((value) => ({ key, value: this.deserialize(value) }))
-                  .catch((err) => {
+                  .catch((unknownError) => {
+                    const err = unknownToError(unknownError);
                     if (err.name === "NotFoundError") {
                       // Not sure how this happens, it's ultra-rare. Since we're expecting
                       // getAllKeys to return only exising keys, one not existing during this get
@@ -98,9 +112,9 @@ class ReduxPersistor<T> {
             .filter((kvPair) => kvPair !== undefined);
 
     return kvProm.then((kvPairs) => {
-      const res: any = {};
+      const res = {};
       kvPairs.forEach((pair) => {
-        insert(res, pair.key, pair.value, hive);
+        insertValueAtLeaf(res, pair.key, pair.value, hive);
       });
       this.mHydrating.add(hive);
       this.mStore.dispatch({
@@ -119,19 +133,19 @@ class ReduxPersistor<T> {
     });
   }
 
-  private deserialize(input: string): any {
+  private deserialize(input: string): unknown {
     if (input === undefined || input.length === 0) {
       return "";
     } else {
       try {
         return JSON.parse(input);
-      } catch (err) {
+      } catch {
         return undefined;
       }
     }
   }
 
-  private serialize(input: any): string {
+  private serialize<T>(input: T): string {
     return JSON.stringify(input);
   }
 
@@ -145,7 +159,7 @@ class ReduxPersistor<T> {
     );
   };
 
-  private doProcessChange(oldState: any, newState: any) {
+  private doProcessChange(oldState: T, newState: T): Promise<void> {
     if (oldState === newState) {
       return Promise.resolve();
     }
@@ -153,8 +167,9 @@ class ReduxPersistor<T> {
     return this.ensureStoreDiffHive(oldState, newState);
   }
 
-  private ensureStoreDiffHive(oldState: any, newState: any) {
-    return this.storeDiffHive(oldState, newState).catch((err) => {
+  private ensureStoreDiffHive(oldState: T, newState: T): Promise<void> {
+    return this.storeDiffHive(oldState, newState).catch((unknownError) => {
+      const err = unknownToError(unknownError);
       // Only way this has ever gone wrong during alpha is when the disk
       // is full, which is nothing we can fix.
       if (
@@ -187,11 +202,7 @@ class ReduxPersistor<T> {
     });
   }
 
-  private isObject(state: any): boolean {
-    return state !== null && typeof state === "object" && !Array.isArray(state);
-  }
-
-  private storeDiffHive(oldState: any, newState: any): Promise<void> {
+  private storeDiffHive(oldState: T, newState: T): Promise<void> {
     let res = Promise.resolve();
 
     Object.keys(oldState).forEach((key) => {
@@ -213,18 +224,18 @@ class ReduxPersistor<T> {
     return res.then(() => undefined);
   }
 
-  private storeDiff(
+  private storeDiff<T = unknown>(
     persistor: IPersistor,
     statePath: string[],
-    oldState: any,
-    newState: any,
+    oldState: T,
+    newState: T,
   ): Promise<void> {
     if (persistor === undefined || oldState === newState) {
       return Promise.resolve();
     }
 
     try {
-      if (this.isObject(oldState) && this.isObject(newState)) {
+      if (isObject(oldState) && isObject(newState)) {
         const oldkeys = Object.keys(oldState);
         const newkeys = Object.keys(newState);
 
@@ -260,27 +271,27 @@ class ReduxPersistor<T> {
     }
   }
 
-  private remove(
+  private remove<T>(
     persistor: IPersistor,
     statePath: string[],
-    state: any,
+    state: T,
   ): Promise<void> {
-    return this.isObject(state)
+    return isObject(state)
       ? Promise.mapSeries(Object.keys(state), (key) =>
           this.remove(persistor, [].concat(statePath, key), state[key]),
         ).then(() => undefined)
       : persistor.removeItem(statePath);
   }
 
-  private add(
+  private add<T>(
     persistor: IPersistor,
     statePath: string[],
-    state: any,
+    state: T,
   ): Promise<void> {
     if (state === undefined) {
       return Promise.resolve();
     }
-    return this.isObject(state)
+    return isObject(state)
       ? Promise.mapSeries(Object.keys(state), (key) =>
           this.add(persistor, [].concat(statePath, key), state[key]),
         ).then(() => undefined)

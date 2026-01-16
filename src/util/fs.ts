@@ -19,7 +19,7 @@ import {
   UserCanceled,
 } from "./CustomErrors";
 import { createErrorReport, getVisibleWindow } from "./errorHandling";
-import { TFunction } from "./i18n";
+import type { TFunction } from "./i18n";
 import lazyRequire from "./lazyRequire";
 import { log } from "./log";
 import { decodeSystemError } from "./nativeErrors";
@@ -39,6 +39,11 @@ import { generate as shortid } from "shortid";
 import * as tmp from "tmp";
 import type * as vortexRunT from "vortex-run";
 import type * as whoLocksT from "wholocks";
+import {
+  getErrorCode,
+  getErrorMessageOrDefault,
+  isErrorWithSystemCode,
+} from "../shared/errors";
 
 const permission: typeof permissionT = lazyRequire(() =>
   require("permissions"),
@@ -52,7 +57,8 @@ const dialog =
       require("@electron/remote").dialog
     : dialogIn;
 
-export { constants, FSWatcher, Stats, WriteStream } from "fs";
+export { constants, Stats, WriteStream } from "fs";
+export type { FSWatcher } from "fs";
 
 // simple re-export of functions we don't touch (yet)
 export {
@@ -181,13 +187,13 @@ function unlockConfirm(filePath: string): PromiseBB<boolean> {
   } catch (err) {
     log("warn", "failed to determine list of processes locking file", {
       filePath,
-      error: err.message,
+      error: getErrorMessageOrDefault(err),
     });
   }
 
   const baseMessage =
     processes.length === 0
-      ? `Vortex needs to access "${filePath}" but doesn\'t have permission to.`
+      ? `Vortex needs to access "${filePath}" but doesn't have permission to.`
       : `Vortex needs to access "${filePath}" but it either has too restrictive ` +
         "permissions or is locked by another process.";
 
@@ -312,14 +318,14 @@ function busyRetry(filePath: string): PromiseBB<boolean> {
   } catch (err) {
     log("warn", "failed to determine list of processes locking file", {
       filePath,
-      error: err.message,
+      error: getErrorMessageOrDefault(err),
     });
   }
 
   const options: Electron.MessageBoxOptions = {
     title: "File busy",
     message:
-      `Vortex needs to access "${filePath}" but it\'s open in another application. ` +
+      `Vortex needs to access "${filePath}" but it's open in another application. ` +
       "Please close the file in all other applications and then retry.",
     detail:
       processes.length > 0
@@ -373,7 +379,8 @@ function errorRepeat(
     let unlockPath = filePath;
     return PromiseBB.resolve(fs.stat(unlockPath))
       .catch((statErr) => {
-        if (statErr.code === "ENOENT") {
+        const code = getErrorCode(statErr);
+        if (code === "ENOENT") {
           unlockPath = path.dirname(filePath);
           return PromiseBB.resolve();
         } else {
@@ -392,11 +399,10 @@ function errorRepeat(
           )
             .then(() => true)
             .catch((elevatedErr) => {
+              const message = getErrorMessageOrDefault(elevatedErr);
               if (
                 elevatedErr instanceof UserCanceled ||
-                elevatedErr.message.indexOf(
-                  "The operation was canceled by the user",
-                ) !== -1
+                message.indexOf("The operation was canceled by the user") !== -1
               ) {
                 return Promise.reject(new UserCanceled());
               }
@@ -404,7 +410,7 @@ function errorRepeat(
               // elevate - while interesting as well - would make error handling too complicated
               log("error", "failed to acquire permission", {
                 filePath,
-                error: elevatedErr.message,
+                error: message,
               });
               return Promise.reject(error);
             });
@@ -600,7 +606,7 @@ export function ensureDirAsync(
   //  implementation directly as there's no way for us to reliably determine
   //  whether the parent folder was empty. We're going to create the
   //  directories ourselves.
-  return !!onDirCreatedCB
+  return onDirCreatedCB
     ? ensureDir(dirPath, onDirCreatedCB)
     : ensureDirInt(dirPath, stackErr, NUM_RETRIES);
 }
@@ -637,21 +643,23 @@ function ensureDir(
         return onDirCreatedCB(dir);
       })
       .catch((err) => {
-        if (err.code === "EEXIST") {
+        const code = getErrorCode(err);
+        if (code === "EEXIST") {
           return PromiseBB.resolve();
         } else {
-          return ["ENOENT"].indexOf(err.code) !== -1
+          return ["ENOENT"].indexOf(code) !== -1
             ? mkdirRecursive(path.dirname(dir))
                 .then(() => PromiseBB.resolve(fs.mkdir(dir)))
                 .then(() => {
                   created.push(dir);
                   return onDirCreatedCB(dir);
                 })
-                .catch((err2) =>
-                  err2.code === "EEXIST"
+                .catch((err2) => {
+                  const code2 = getErrorCode(err2);
+                  return code2 === "EEXIST"
                     ? PromiseBB.resolve()
-                    : PromiseBB.reject(err2),
-                )
+                    : PromiseBB.reject(err2);
+                })
             : PromiseBB.reject(err);
         }
       });
@@ -666,9 +674,11 @@ function ensureDir(
 function selfCopyCheck(src: string, dest: string) {
   return PromiseBB.all([
     (fs.stat as any)(src, { bigint: true }),
-    (fs.stat as any)(dest, { bigint: true }).catch((err) => {
-      return err.code === "ENOENT" ? Promise.resolve({}) : Promise.reject(err);
-    }),
+    (fs.stat as any)(dest, { bigint: true }).catch((err) =>
+      getErrorCode(err) === "ENOENT"
+        ? Promise.resolve({})
+        : Promise.reject(err),
+    ),
   ]).then((stats: fs.BigIntStats[]) =>
     stats[0].ino === stats[1].ino
       ? PromiseBB.reject(new SelfCopyCheckError(src, dest, stats[0].ino))
@@ -1254,7 +1264,10 @@ export function forcePerm<T>(
 ): PromiseBB<T> {
   return op().catch((err) => {
     const fileToAccess = filePath !== undefined ? filePath : err.path;
-    if (["EPERM", "EACCES"].indexOf(err.code) !== -1 || err.systemCode === 5) {
+    if (
+      ["EPERM", "EACCES"].indexOf(err.code) !== -1 ||
+      (isErrorWithSystemCode(err) && err.systemCode === 5)
+    ) {
       const wantedAttributes =
         process.platform === "win32"
           ? parseInt("0666", 8)

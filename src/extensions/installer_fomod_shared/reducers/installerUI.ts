@@ -1,10 +1,10 @@
 import update from "immutability-helper";
 
 import * as actions from "../actions/installerUI";
-import { IFOMODStateDialog } from "../types/interface";
+import type { IFOMODStateDialog } from "../types/interface";
 
-import { IReducerSpec } from "../../../types/api";
-import { createReducer } from "../../../util/reducers";
+import type { IReducerSpec } from "../../../types/api";
+import { createReducer } from "../../../store/reducers";
 
 const defaults: IFOMODStateDialog = {
   activeInstanceId: null,

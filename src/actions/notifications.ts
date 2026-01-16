@@ -1,13 +1,17 @@
-import {
+import type {
   DialogActions,
   DialogType,
   IDialogContent,
   IDialogResult,
 } from "../types/IDialog";
-import { INotification, NotificationDismiss } from "../types/INotification";
+import type {
+  INotification,
+  NotificationDismiss,
+} from "../types/INotification";
 import local from "../util/local";
 import { log } from "../util/log";
 import { truthy } from "../util/util";
+import { getErrorMessageOrDefault } from "../shared/errors";
 
 import safeCreateAction from "./safeCreateAction";
 
@@ -279,7 +283,7 @@ export function showDialog(
                 log("error", "rejection from dialog callback", {
                   title,
                   action: action.label,
-                  message: err.message,
+                  message: getErrorMessageOrDefault(err),
                 });
               });
             }
@@ -287,7 +291,7 @@ export function showDialog(
             log("error", "exception from dialog callback", {
               title,
               action: action.label,
-              message: err.message,
+              message: getErrorMessageOrDefault(err),
             });
           }
         }

@@ -4,7 +4,7 @@ import github from "../../../util/github";
 import { log } from "../../../util/log";
 import MainPage from "../../../renderer/views/MainPage";
 
-import { ILicense } from "../types/ILicense";
+import type { ILicense } from "../types/ILicense";
 
 import * as fs from "fs";
 import I18next from "i18next";
@@ -14,6 +14,7 @@ import { Image, Media, Panel } from "react-bootstrap";
 import ReactMarkdown from "react-markdown";
 import { getApplication } from "../../../util/application";
 import getVortexPath from "../../../util/getVortexPath";
+import { getErrorMessageOrDefault } from "../../../shared/errors";
 
 let modules = {};
 let ownLicenseText: string = "";
@@ -27,7 +28,7 @@ if (process.type === "renderer") {
   } catch (err) {
     // should we display this in the ui? It shouldn't ever happen in the release and 99% of users
     // won't care anyway.
-    log("error", "failed to read license files", err.message);
+    log("error", "failed to read license files", getErrorMessageOrDefault(err));
   }
 }
 
@@ -89,12 +90,20 @@ class AboutPage extends ComponentEx<IProps, IComponentState> {
               this.nextState.tag = "Preview";
             }
           } catch (err) {
-            log("warn", "Failed to parse release info", err.message);
+            log(
+              "warn",
+              "Failed to parse release info",
+              getErrorMessageOrDefault(err),
+            );
           }
         }
       })
       .catch((err) => {
-        log("warn", "Failed to look up current Vortex releases", err.message);
+        log(
+          "warn",
+          "Failed to look up current Vortex releases",
+          getErrorMessageOrDefault(err),
+        );
       });
   }
 

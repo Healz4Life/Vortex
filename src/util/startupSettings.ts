@@ -1,12 +1,13 @@
 import * as path from "path";
 import { getApplication } from "./application";
 
-import { IParameters } from "./commandLine";
+import type { IParameters } from "./commandLine";
 import Debouncer from "./Debouncer";
 import * as fs from "./fs";
 import { writeFileAtomic } from "./fsAtomic";
 import getVortexPath from "./getVortexPath";
 import { log } from "./log";
+import { getErrorCode, getErrorMessageOrDefault } from "../shared/errors";
 
 const startupPath = () =>
   path.join(getVortexPath("appData"), getApplication().name, "startup.json");
@@ -15,9 +16,11 @@ function read(): IParameters {
   try {
     return JSON.parse(fs.readFileSync(startupPath(), { encoding: "utf-8" }));
   } catch (err) {
-    if (err.code !== "ENOENT") {
-      log("warn", "failed to parse startup.json", { error: err.message });
+    const code = getErrorCode(err);
+    if (code !== "ENOENT") {
+      log("warn", "failed to parse startup.json", err);
     }
+
     return {};
   }
 }
@@ -25,7 +28,9 @@ function read(): IParameters {
 const updateDebouncer = new Debouncer(() => {
   return writeFileAtomic(startupPath(), JSON.stringify(settings)).catch(
     (err) => {
-      log("error", "failed to write startup.json", { error: err.message });
+      log("error", "failed to write startup.json", {
+        error: getErrorMessageOrDefault(err),
+      });
     },
   );
 }, 100);

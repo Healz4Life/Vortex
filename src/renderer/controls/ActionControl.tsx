@@ -1,9 +1,10 @@
-import {
+import { getErrorMessageOrDefault } from "../../shared/errors";
+import type {
   ActionFunc,
   IActionDefinition,
   IActionOptions,
 } from "../../types/IActionDefinition";
-import { IRegisteredExtension } from "../../util/ExtensionManager";
+import type { IRegisteredExtension } from "../../util/ExtensionManager";
 import { extend } from "../../util/ExtensionProvider";
 
 import * as _ from "lodash";
@@ -90,7 +91,7 @@ class ActionControl extends React.Component<
       try {
         return def.condition(instanceIds);
       } catch (err) {
-        return `Error: ${err.message}`;
+        return `Error: ${getErrorMessageOrDefault(err)}`;
       }
     };
 

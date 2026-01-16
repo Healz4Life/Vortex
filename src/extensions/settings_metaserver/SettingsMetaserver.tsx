@@ -7,7 +7,7 @@ import {
   connect,
   translate,
 } from "../../renderer/controls/ComponentEx";
-import { TFunction } from "../../util/i18n";
+import type { TFunction } from "../../util/i18n";
 import { log } from "../../util/log";
 import { setSafe } from "../../util/storeHelper";
 import DNDContainer from "../../renderer/views/DNDContainer";
@@ -24,22 +24,22 @@ import {
   ListGroup,
   ListGroupItem,
 } from "react-bootstrap";
-import {
+import type {
   ConnectDragSource,
   ConnectDropTarget,
-  DragSource,
   DragSourceConnector,
   DragSourceMonitor,
   DragSourceSpec,
-  DropTarget,
   DropTargetConnector,
   DropTargetMonitor,
   DropTargetSpec,
 } from "react-dnd";
+import { DragSource, DropTarget } from "react-dnd";
 import { findDOMNode } from "react-dom";
-import * as Redux from "redux";
-import { ThunkDispatch } from "redux-thunk";
+import type * as Redux from "redux";
+import type { ThunkDispatch } from "redux-thunk";
 import { generate as shortid } from "shortid";
+import { getErrorMessageOrDefault } from "../../shared/errors";
 
 interface IServerEntry {
   url: string;
@@ -92,7 +92,7 @@ const serverTarget: DropTargetSpec<any> = {
         props.onHover(source, target, cursorPos.y > box.top + box.height / 2);
       } catch (err) {
         log("warn", "failed to determine component bounds", {
-          error: err.message,
+          error: getErrorMessageOrDefault(err),
         });
       }
     }

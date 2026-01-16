@@ -2,7 +2,7 @@ import getDownloadPath from "../extensions/download_management/util/getDownloadP
 import resolvePath, {
   pathDefaults,
 } from "../extensions/mod_management/util/resolvePath";
-import { IState } from "../types/IState";
+import type { IState } from "../types/IState";
 
 import {
   clearOAuthCredentials,
@@ -20,12 +20,14 @@ import { UserCanceled } from "./CustomErrors";
 import { log } from "./log";
 
 import Promise from "bluebird";
-import { BrowserWindow, MessageBoxOptions, dialog } from "electron";
+import type { BrowserWindow, MessageBoxOptions } from "electron";
+import { dialog } from "electron";
 import * as path from "path";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 import * as semver from "semver";
 import format from "string-template";
 import { reinterpretUntilZeros } from "ref";
+import { getErrorCode } from "../shared/errors";
 
 interface IMigration {
   id: string;
@@ -57,13 +59,14 @@ function selectDirectory(
       }
       return fs
         .readdirAsync(filePaths[0])
-        .catch((err) =>
-          err.code === "ENOENT"
+        .catch((err) => {
+          const code = getErrorCode(err);
+          return code === "ENOENT"
             ? fs
                 .ensureDirWritableAsync(filePaths[0], () => Promise.resolve())
                 .then(() => [])
-            : Promise.reject(err),
-        )
+            : Promise.reject(err);
+        })
         .then((files) => {
           if (files.length > 0) {
             dialog.showErrorBox(
@@ -91,7 +94,7 @@ function transferPath(from: string, to: string): Promise<void> {
         .map((fileName: string) =>
           func(path.join(from, fileName), path.join(to, fileName)).catch(
             (err) =>
-              err.code === "EXDEV"
+              getErrorCode(err) === "EXDEV"
                 ? // EXDEV implies we tried to rename when source and destination are
                   // not in fact on the same volume. This is what comparing the stat.dev
                   // was supposed to prevent.
@@ -105,7 +108,7 @@ function transferPath(from: string, to: string): Promise<void> {
         .then(() => fs.removeAsync(from));
     })
     .catch((err) =>
-      err.code === "ENOENT" ? Promise.resolve() : Promise.reject(err),
+      getErrorCode(err) === "ENOENT" ? Promise.resolve() : Promise.reject(err),
     );
 }
 

@@ -1,11 +1,12 @@
-import { IPersistor } from "../types/IExtensionContext";
-import { DataInvalid } from "./CustomErrors";
-import { log } from "./log";
+import type { IPersistor } from "../types/IExtensionContext";
+import { DataInvalid } from "../util/CustomErrors";
+import { log } from "../util/log";
 
 import Promise from "bluebird";
 import encode from "encoding-down";
-import leveldownT from "leveldown";
+import type leveldownT from "leveldown";
 import * as levelup from "levelup";
+import { unknownToError } from "../shared/errors";
 
 const SEPARATOR: string = "###";
 
@@ -195,7 +196,8 @@ class LevelPersist implements IPersistor {
   ): (...args: Parameters<T>) => ReturnType<T> {
     return (...args: Parameters<T>): ReturnType<T> => {
       const stackErr = new Error();
-      return cb(...args).catch((err) => {
+      return cb(...args).catch((unknownErr) => {
+        const err = unknownToError(unknownErr);
         err.stack = stackErr.stack;
         return Promise.reject(err);
       });

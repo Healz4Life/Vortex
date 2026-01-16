@@ -1,51 +1,40 @@
 import { ipcMain, ipcRenderer } from "electron";
 import * as path from "path";
-import { IExtensionApi } from "../types/IExtensionContext";
+import type { IExtensionApi } from "../types/IExtensionContext";
 
-import {
+import type {
   IPreset,
   IPresetsState,
   IPresetStep,
   PresetStepType,
 } from "../types/IPreset";
 
-import * as validation from "../validationCode/validation";
+import { iPresetSchema, iPresetsStateSchema } from "../types/IPreset.gen";
 import { makeRemoteCallSync } from "./electronRemote";
 
 import * as fs from "./fs";
 import getVortexPath from "./getVortexPath";
 import { log } from "./log";
+import {
+  getErrorCode,
+  unknownToError,
+  getErrorMessageOrDefault,
+} from "../shared/errors";
 
 const getAppName = makeRemoteCallSync("get-application-name", (electron) =>
   electron.app.getName(),
 );
 
-type StepCB = (step: IPresetStep, data: any) => PromiseLike<void>;
+type StepCB = (step: IPresetStep, data: unknown) => PromiseLike<void>;
 
-interface ISchemaViolation {
-  message: string;
+function validatePreset(input: unknown): IPreset {
+  const result = iPresetSchema.parse(input);
+  return result;
 }
 
-function validatePreset(input: any): IPreset {
-  const validationErrors: ISchemaViolation[] =
-    validation.validateIPreset(input);
-
-  if (validationErrors.length !== 0) {
-    throw new Error(validationErrors.map((error) => error.message).join("; "));
-  }
-
-  return input as IPreset;
-}
-
-function validateState(input: any): IPresetsState {
-  const validationErrors: ISchemaViolation[] =
-    validation.validateIPresetsState(input);
-
-  if (validationErrors.length !== 0) {
-    throw new Error(validationErrors.map((error) => error.message).join("; "));
-  }
-
-  return input as IPresetsState;
+function validateState(input: unknown): IPresetsState {
+  const result = iPresetsStateSchema.parse(input);
+  return result;
 }
 
 class PresetManager {
@@ -83,10 +72,14 @@ class PresetManager {
         .filter((fileName) => path.extname(fileName) === ".json")
         .sort();
     } catch (err) {
-      log(err.code === "ENOENT" ? "debug" : "error", "no preset files", {
-        basePath,
-        error: err.message,
-      });
+      log(
+        getErrorCode(err) === "ENOENT" ? "debug" : "error",
+        "no preset files",
+        {
+          basePath,
+          error: getErrorMessageOrDefault(err),
+        },
+      );
     }
 
     log("debug", "reading preset files", {
@@ -105,8 +98,11 @@ class PresetManager {
           JSON.parse(fs.readFileSync(presetPath, { encoding: "utf-8" })),
         );
         this.mPresets[presetId] = presetData;
-      } catch (err) {
-        if (err.code !== "ENOENT") {
+      } catch (unknownError) {
+        const code = getErrorCode(unknownError);
+        const err = unknownToError(unknownError);
+        // ENOENT, meaning there is no preset, is fine
+        if (code !== "ENOENT") {
           log("error", "failed to read preset", {
             presetFile,
             error: err.message,
@@ -114,7 +110,6 @@ class PresetManager {
           this.mError = err;
           return;
         }
-        // ENOENT, meaning there is no preset, is fine
       }
     });
   }
@@ -219,7 +214,7 @@ class PresetManager {
     } catch (err) {
       log("error", "preset step failed", {
         step: JSON.stringify(step),
-        error: err.message,
+        error: getErrorMessageOrDefault(err),
         process: process.type,
       });
       this.mApi?.sendNotification?.({
@@ -259,7 +254,9 @@ class PresetManager {
       this.mState.presets[presetId].completed.push(stepId);
       this.writeState();
     } catch (err) {
-      log("error", "failed to update preset state", { erorr: err.message });
+      log("error", "failed to update preset state", {
+        error: getErrorMessageOrDefault(err),
+      });
       return true;
     }
 
@@ -354,8 +351,10 @@ class PresetManager {
       this.mState = validateState(
         JSON.parse(fs.readFileSync(this.mStatePath, { encoding: "utf-8" })),
       );
-    } catch (err) {
-      if (err.code !== "ENOENT") {
+    } catch (unknownError) {
+      const code = getErrorCode(unknownError);
+      const err = unknownToError(unknownError);
+      if (code !== "ENOENT") {
         log("error", "failed to read preset state", { error: err.message });
         this.mError = err;
         return;

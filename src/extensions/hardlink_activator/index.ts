@@ -1,28 +1,29 @@
-import {
+import type {
   IExtensionApi,
   IExtensionContext,
 } from "../../types/IExtensionContext";
-import { IGame } from "../../types/IGame";
+import type { IGame } from "../../types/IGame";
 import * as fs from "../../util/fs";
 import { log } from "../../util/log";
 import { installPathForGame } from "../../util/selectors";
 
-import { IDiscoveryResult } from "../gamemode_management/types/IDiscoveryResult";
+import type { IDiscoveryResult } from "../gamemode_management/types/IDiscoveryResult";
 import { getGame } from "../gamemode_management/util/getGame";
 import LinkingDeployment from "../mod_management/LinkingDeployment";
-import {
+import type {
   IDeployedFile,
   IDeploymentMethod,
   IUnavailableReason,
 } from "../mod_management/types/IDeploymentMethod";
 
 import Promise from "bluebird";
-import { TFunction } from "i18next";
+import type { TFunction } from "i18next";
 import * as path from "path";
 import turbowalk from "turbowalk";
 import * as util from "util";
 import * as winapi from "winapi-bindings";
 import { setSettingsPage } from "../../actions/session";
+import { getErrorCode } from "../../shared/errors";
 
 export class FileFound extends Error {
   constructor(name) {
@@ -187,7 +188,8 @@ class DeploymentMethod extends LinkingDeployment {
       fs.linkSync(canary, canary + ".link");
     } catch (err) {
       // EMFILE shouldn't keep us from using hard linking
-      if (err.code !== "EMFILE") {
+      const code = getErrorCode(err);
+      if (code !== "EMFILE") {
         // the error code we're actually getting is EISDIR, which makes no sense at all
         res = {
           description: (t) => t("Filesystem doesn't support hard links."),

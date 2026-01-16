@@ -1,13 +1,15 @@
 import React from "react";
 import { Button, Modal } from "react-bootstrap";
-import { withTranslation, WithTranslation } from "react-i18next";
+import type { WithTranslation } from "react-i18next";
+import { withTranslation } from "react-i18next";
 import { connect } from "react-redux";
 import Usage from "../../renderer/controls/Usage";
-import { IState } from "../../types/IState";
-import { TFunction } from "../../util/i18n";
+import type { IState } from "../../types/IState";
+import type { TFunction } from "../../util/i18n";
 import relativeTime from "../../util/relativeTime";
 import { getGame } from "../gamemode_management/util/getGame";
-import { IHistoryEvent, IHistoryStack } from "./types";
+import type { IHistoryEvent, IHistoryStack } from "./types";
+import { unknownToError } from "../../shared/errors";
 
 interface IDialogProps {
   onClose: () => void;
@@ -46,7 +48,9 @@ function HistoryItem(props: IHistoryItemProps) {
 
   const onClick = React.useCallback(() => {
     onReverted(stackId, evt);
-    stack.revert(evt).catch((err) => onError(err, stackId, evt));
+    stack
+      .revert(evt)
+      .catch((err) => onError(unknownToError(err), stackId, evt));
   }, []);
 
   const game = getGame(evt.gameId);

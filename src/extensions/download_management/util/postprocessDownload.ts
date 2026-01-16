@@ -1,4 +1,4 @@
-import { IExtensionApi } from "../../../types/IExtensionContext";
+import type { IExtensionApi } from "../../../types/IExtensionContext";
 import { delayed, toPromise } from "../../../util/util";
 import { log } from "../../../util/log";
 import {
@@ -11,7 +11,8 @@ import {
 import queryInfo from "./queryDLInfo";
 import { batchDispatch } from "../../../util/util";
 import path from "path";
-import { IHashResult } from "modmeta-db";
+import type { IHashResult } from "modmeta-db";
+import { getErrorMessageOrDefault } from "../../../shared/errors";
 
 export function finalizeDownload(
   api: IExtensionApi,
@@ -52,7 +53,11 @@ export function finalizeDownload(
       // Run metadata lookup asynchronously without blocking download completion
       queryInfo(api, [id], false).catch((err) => {
         // Log error but don't fail the download
-        log("warn", "Failed to query download metadata", err.message);
+        log(
+          "warn",
+          "Failed to query download metadata",
+          getErrorMessageOrDefault(err),
+        );
       });
       return Promise.resolve();
     })

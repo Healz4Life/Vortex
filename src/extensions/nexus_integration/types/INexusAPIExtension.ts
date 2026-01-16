@@ -1,4 +1,4 @@
-import {
+import type {
   EndorsedStatus,
   IModFileContentPage,
   ICollection,
@@ -14,9 +14,10 @@ import {
   IModFileContentPageQuery,
   IModFileContentSearchFilter,
   IRevision,
+  IModRequirements,
 } from "@nexusmods/nexus-api";
-import { IMod } from "../../mod_management/types/IMod";
-import { IValidateKeyDataV2 } from "./IValidateKeyData";
+import type { IMod } from "../../mod_management/types/IMod";
+import type { IValidateKeyDataV2 } from "./IValidateKeyData";
 
 export interface INexusAPIExtension {
   nexusCheckModsVersion?: (
@@ -115,6 +116,11 @@ export interface INexusAPIExtension {
   nexusGetPreferences?: (
     query: IPreferenceQuery,
   ) => PromiseLike<Partial<IPreference>>;
+
+  nexusGetModRequirements?: (
+    gameId: string,
+    modId: number,
+  ) => PromiseLike<Partial<IModRequirements>>;
 
   // Retrieves user data which is persistently stored in Vortex's state.
   nexusGetUserKeyData?: () => PromiseLike<IValidateKeyDataV2>;

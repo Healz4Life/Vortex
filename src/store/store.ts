@@ -1,28 +1,30 @@
 import reducer, { Decision } from "../reducers/index";
-import { IPersistor, PersistingType } from "../types/IExtensionContext";
-import { IState } from "../types/IState";
+import type { IPersistor, PersistingType } from "../types/IExtensionContext";
+import type { IState } from "../types/IState";
 
-import { DataInvalid } from "./CustomErrors";
-import { getVisibleWindow, terminate } from "./errorHandling";
-import ExtensionManager from "./ExtensionManager";
-import * as fs from "./fs";
-import { writeFileAtomic } from "./fsAtomic";
-import { log } from "./log";
+import { DataInvalid } from "../util/CustomErrors";
+import { getVisibleWindow, terminate } from "../util/errorHandling";
+import type ExtensionManager from "../util/ExtensionManager";
+import * as fs from "../util/fs";
+import { writeFileAtomic } from "../util/fsAtomic";
+import { log } from "../util/log";
 import ReduxPersistor from "./ReduxPersistor";
-import { reduxSanity, StateError } from "./reduxSanity";
+import type { StateError } from "./reduxSanity";
+import { reduxSanity } from "./reduxSanity";
 
 import Promise from "bluebird";
 import { dialog, ipcMain } from "electron";
 import { forwardToRenderer } from "electron-redux";
 import encode from "encoding-down";
-import * as leveldownT from "leveldown";
+import type * as leveldownT from "leveldown";
 import levelup from "levelup";
 import * as _ from "lodash";
 import * as path from "path";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 import { applyMiddleware, compose, createStore } from "redux";
 import thunkMiddleware from "redux-thunk";
-import getVortexPath from "./getVortexPath";
+import getVortexPath from "../util/getVortexPath";
+import { getErrorCode, unknownToError } from "../shared/errors";
 
 let basePersistor: ReduxPersistor<IState>;
 
@@ -92,8 +94,9 @@ export function createVortexStore(
         });
       }
       store.dispatch(action);
-    } catch (err) {
+    } catch (unknownError) {
       log("error", "failed to forward redux action", payload);
+      const err = unknownToError(unknownError);
       terminate(
         {
           message: "Failed to store state change",
@@ -203,11 +206,12 @@ function exists(filePath: string): boolean {
     fs.statSync(filePath);
     return true;
   } catch (err) {
-    if (err.code === "ENOENT") {
+    const code = getErrorCode(err);
+    if (code === "ENOENT") {
       return false;
-    } else {
-      throw err;
     }
+
+    throw err;
   }
 }
 
@@ -251,7 +255,7 @@ export function createFullStateBackup(
   try {
     serialized = JSON.stringify(state, undefined, 2);
   } catch (err) {
-    log("error", "Failed to create state backup", err.message);
+    log("error", "Failed to create state backup", err);
     return Promise.reject(new DataInvalid("Failed to create state backup"));
   }
 

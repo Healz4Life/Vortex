@@ -1,7 +1,10 @@
 import Bluebird from "bluebird";
-import { Action } from "redux";
-import { IExtensionApi, ILookupResult } from "../../../types/IExtensionContext";
-import { IState } from "../../../types/IState";
+import type { Action } from "redux";
+import type {
+  IExtensionApi,
+  ILookupResult,
+} from "../../../types/IExtensionContext";
+import type { IState } from "../../../types/IState";
 import { log } from "../../../util/log";
 import { batchDispatch } from "../../../util/util";
 import * as selectors from "../../gamemode_management/selectors";
@@ -11,6 +14,7 @@ import { convertNXMIdReverse } from "../../nexus_integration/util/convertGameId"
 import { activeGameId } from "../../profile_management/selectors";
 import { setDownloadModInfo } from "../actions/state";
 import { downloadPathForGame } from "../selectors";
+import { getErrorMessageOrDefault } from "../../../shared/errors";
 
 // Queue management for metadata lookups
 interface IMetadataRequest {
@@ -98,7 +102,7 @@ class MetadataLookupQueue {
         .catch((err) => {
           log("warn", "metadata lookup failed", {
             dlId: request.dlId,
-            error: err.message,
+            error: getErrorMessageOrDefault(err),
           });
           request.reject(err);
         })

@@ -1,18 +1,19 @@
 import { showDialog } from "../../actions/notifications";
 import Dashlet from "../../renderer/controls/Dashlet";
 import EmptyPlaceholder from "../../renderer/controls/EmptyPlaceholder";
-import {
+import type {
   DialogActions,
   DialogType,
   IDialogContent,
   IDialogResult,
 } from "../../types/IDialog";
-import { IDiscoveredTool } from "../../types/IDiscoveredTool";
-import { IMod, IRunningTool } from "../../types/IState";
+import type { IDiscoveredTool } from "../../types/IDiscoveredTool";
+import type { IMod, IRunningTool } from "../../types/IState";
 import { log } from "../../util/log";
 import { showError } from "../../util/message";
 import { activeGameId } from "../../util/selectors";
-import StarterInfo, { IStarterInfo } from "../../util/StarterInfo";
+import type { IStarterInfo } from "../../util/StarterInfo";
+import StarterInfo from "../../util/StarterInfo";
 import { getSafe } from "../../util/storeHelper";
 import { truthy } from "../../util/util";
 
@@ -23,24 +24,24 @@ import {
   setToolVisible,
 } from "../gamemode_management/actions/settings";
 
-import { IDiscoveryResult } from "../gamemode_management/types/IDiscoveryResult";
-import { IGameStored } from "../gamemode_management/types/IGameStored";
-import { IToolStored } from "../gamemode_management/types/IToolStored";
+import type { IDiscoveryResult } from "../gamemode_management/types/IDiscoveryResult";
+import type { IGameStored } from "../gamemode_management/types/IGameStored";
+import type { IToolStored } from "../gamemode_management/types/IToolStored";
 
 import { setPrimaryTool, setToolOrder } from "./actions";
 
 import ToolEditDialog from "./ToolEditDialog";
 
-import Promise from "bluebird";
+import type Promise from "bluebird";
 import * as React from "react";
 import { Media } from "react-bootstrap";
-import * as Redux from "redux";
-import { ThunkDispatch } from "redux-thunk";
+import type * as Redux from "redux";
+import type { ThunkDispatch } from "redux-thunk";
 import { generate as shortid } from "shortid";
 
 import DynDiv from "../../renderer/controls/DynDiv";
 import FlexLayout from "../../renderer/controls/FlexLayout";
-import { IReducerAction, StateReducerType } from "./types";
+import type { IReducerAction, StateReducerType } from "./types";
 
 import { MainContext } from "../../renderer/views/MainWindow";
 
@@ -49,6 +50,7 @@ import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
 
 import Tool from "./Tool";
+import { getErrorMessageOrDefault, unknownToError } from "../../shared/errors";
 
 interface IBaseProps {
   onGetValidTools: (
@@ -412,7 +414,8 @@ function generateGameStarter(props: IConnectedProps): StarterInfo {
   try {
     const starter = new StarterInfo(game, discoveredGame);
     return starter;
-  } catch (err) {
+  } catch (unknownError) {
+    const err = unknownToError(unknownError);
     log("error", "failed to create dashlet game entry", {
       error: err.message,
       stack: err.stack,
@@ -474,7 +477,7 @@ function generateToolStarters(
         log("error", "tool configuration invalid", {
           gameId,
           toolId,
-          error: err.message,
+          error: getErrorMessageOrDefault(err),
         });
       }
     });

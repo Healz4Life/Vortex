@@ -3,21 +3,21 @@ import { showDialog } from "../../actions/notifications";
 import EmptyPlaceholder from "../controls/EmptyPlaceholder";
 import Spinner from "../controls/Spinner";
 import { IconButton } from "../controls/TooltipControls";
-import { IDiscoveryResult } from "../../extensions/gamemode_management/types/IDiscoveryResult";
-import { IGameStored } from "../../extensions/gamemode_management/types/IGameStored";
-import { IProfile } from "../../extensions/profile_management/types/IProfile";
+import type { IDiscoveryResult } from "../../extensions/gamemode_management/types/IDiscoveryResult";
+import type { IGameStored } from "../../extensions/gamemode_management/types/IGameStored";
+import type { IProfile } from "../../extensions/profile_management/types/IProfile";
 import { makeExeId } from "../../reducers/session";
-import {
+import type {
   DialogActions,
   DialogType,
   IDialogContent,
   IDialogResult,
 } from "../../types/IDialog";
-import { IDiscoveredTool } from "../../types/IDiscoveredTool";
-import { IRunningTool, IState } from "../../types/IState";
+import type { IDiscoveredTool } from "../../types/IDiscoveredTool";
+import type { IRunningTool, IState } from "../../types/IState";
 import { ComponentEx, connect, translate } from "../controls/ComponentEx";
 import Debouncer from "../../util/Debouncer";
-import { TFunction } from "../../util/i18n";
+import type { TFunction } from "../../util/i18n";
 import { log } from "../../util/log";
 import { showError } from "../../util/message";
 import {
@@ -33,10 +33,11 @@ import { truthy } from "../../util/util";
 import Promise from "bluebird";
 import * as React from "react";
 import { DropdownButton, MenuItem } from "react-bootstrap";
-import { WithTranslation } from "react-i18next";
-import * as Redux from "redux";
-import { ThunkDispatch } from "redux-thunk";
+import type { WithTranslation } from "react-i18next";
+import type * as Redux from "redux";
+import type { ThunkDispatch } from "redux-thunk";
 import { pathToFileURL } from "url";
+import { unknownToError } from "../../shared/errors";
 
 export interface IBaseProps {
   t: TFunction;
@@ -357,7 +358,8 @@ class QuickLauncher extends ComponentEx<IProps, IComponentState> {
           return new StarterInfo(game, gameDiscovery);
         }
       }
-    } catch (err) {
+    } catch (unknownError) {
+      const err = unknownToError(unknownError);
       log("error", "failed to create quick launcher entry", {
         error: err.message,
         stack: err.stack,

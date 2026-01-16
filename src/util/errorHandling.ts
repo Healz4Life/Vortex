@@ -2,8 +2,8 @@ import {
   NEXUS_BASE_URL,
   OAUTH_CLIENT_ID,
 } from "../extensions/nexus_integration/constants";
-import { IErrorOptions, IExtensionApi } from "../types/api";
-import { IError } from "../types/IError";
+import type { IErrorOptions, IExtensionApi } from "../types/api";
+import type { IError } from "../types/IError";
 
 import { COMPANY_ID } from "./constants";
 import { UserCanceled } from "./CustomErrors";
@@ -17,12 +17,14 @@ import { getSafe } from "./storeHelper";
 import { flatten, getAllPropertyNames, spawnSelf, truthy } from "./util";
 
 import type * as RemoteT from "@electron/remote";
-import NexusT, {
+import type {
   IFeedbackResponse,
   IOAuthCredentials,
 } from "@nexusmods/nexus-api";
+import type NexusT from "@nexusmods/nexus-api";
 import Promise from "bluebird";
-import { BrowserWindow, dialog as dialogIn, ipcRenderer } from "electron";
+import type { BrowserWindow } from "electron";
+import { dialog as dialogIn, ipcRenderer } from "electron";
 import * as fs from "fs-extra";
 import I18next from "i18next";
 import * as os from "os";
@@ -33,6 +35,7 @@ import {} from "uuid";
 import { getApplication } from "./application";
 import lazyRequire from "./lazyRequire";
 import { getCPUArch } from "./nativeArch";
+import { getErrorMessageOrDefault } from "../shared/errors";
 
 const remote = lazyRequire<typeof RemoteT>(() => require("@electron/remote"));
 
@@ -212,7 +215,11 @@ function nexusReport(
       ),
     )
     .catch((err) => {
-      log("error", "failed to report error to nexus", err.message);
+      log(
+        "error",
+        "failed to report error to nexus",
+        getErrorMessageOrDefault(err),
+      );
       return undefined;
     });
 }
@@ -241,7 +248,7 @@ export function setOutdated(api: IExtensionApi) {
       outdated = semver.lt(version, state.persistent.nexus.newestVersion);
     } catch (err) {
       // not really a big issue
-      log("warn", "failed to update outdated status", { message: err.message });
+      log("warn", "failed to update outdated status", err);
     }
   }
   api.onStateChange(["persistent", "nexus", "newestVersion"], (prev, next) => {

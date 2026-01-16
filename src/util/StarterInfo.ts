@@ -1,19 +1,18 @@
-/* eslint-disable */
 import { setToolRunning } from "../actions";
-import { IDiscoveredTool } from "../types/IDiscoveredTool";
-import { IGame } from "../types/IGame";
+import type { IDiscoveredTool } from "../types/IDiscoveredTool";
+import type { IGame } from "../types/IGame";
 import { log } from "../util/log";
 
 import GameStoreHelper from "./GameStoreHelper";
 
 import { getSafe } from "../util/storeHelper";
 
-import { IDiscoveryResult } from "../extensions/gamemode_management/types/IDiscoveryResult";
-import { IGameStored } from "../extensions/gamemode_management/types/IGameStored";
-import { IToolStored } from "../extensions/gamemode_management/types/IToolStored";
+import type { IDiscoveryResult } from "../extensions/gamemode_management/types/IDiscoveryResult";
+import type { IGameStored } from "../extensions/gamemode_management/types/IGameStored";
+import type { IToolStored } from "../extensions/gamemode_management/types/IToolStored";
 import { getGame } from "../extensions/gamemode_management/util/getGame";
 
-import { IExtensionApi } from "../types/IExtensionContext";
+import type { IExtensionApi } from "../types/IExtensionContext";
 
 import { getApplication } from "./application";
 import {
@@ -28,6 +27,7 @@ import Promise from "bluebird";
 import * as fs from "fs";
 import * as path from "path";
 import { GameEntryNotFound, GameStoreNotFound } from "../types/IGameStore";
+import { getErrorCode, unknownToError } from "../shared/errors";
 
 function getCurrentWindow() {
   if (process.type === "renderer") {
@@ -252,8 +252,10 @@ class StarterInfo implements IStarterInfo {
           false,
         );
       })
-      .catch((err) => {
-        if (err.code === "ENOENT") {
+      .catch((unknownError) => {
+        const code = getErrorCode(unknownError);
+        const err = unknownToError(unknownError);
+        if (code === "ENOENT") {
           onShowError(
             "Failed to run tool",
             {
@@ -265,7 +267,7 @@ class StarterInfo implements IStarterInfo {
             },
             false,
           );
-        } else if (err.code === "EBUSY") {
+        } else if (code === "EBUSY") {
           // Application is still running in the background. Let the user know and suppress
           //  the report button.
           onShowError(
@@ -280,7 +282,7 @@ class StarterInfo implements IStarterInfo {
             },
             false,
           );
-        } else if (err.code === "UNKNOWN") {
+        } else if (code === "UNKNOWN") {
           // info sucks but node.js doesn't give us too much information about what went wrong
           // and we can't have users misconfigure their tools and then report the error they
           // get as feedback

@@ -1,6 +1,5 @@
-/* eslint-disable */
-import { IExtensionContext } from "../../types/IExtensionContext";
-import { IState } from "../../types/IState";
+import type { IExtensionContext } from "../../types/IExtensionContext";
+import type { IState } from "../../types/IState";
 import * as fs from "../../util/fs";
 import { log } from "../../util/log";
 import { ParserError } from "../announcement_dashlet/types";
@@ -9,13 +8,14 @@ import path from "path";
 import url from "url";
 import https from "https";
 
-import {
+import type {
   IMOTMEntry,
   ModSpotlightEntry,
   ModSpotlightEntryExt,
   VideoEntryType,
 } from "./types";
 import ModSpotlightsDashlet from "./ModSpotlightsDashlet";
+import { getErrorMessageOrDefault } from "../../shared/errors";
 
 // Can be used for debugging.
 const DEBUG_MODE: boolean = false;
@@ -75,7 +75,12 @@ function getHTTPData<T>(link: string): Promise<T[]> {
               resolve(parsed);
             } catch (err) {
               reject(
-                new ParserError(err.statusCode, err.message, link, output),
+                new ParserError(
+                  err["statusCode"] ?? -1,
+                  getErrorMessageOrDefault(err),
+                  link,
+                  output,
+                ),
               );
             }
           });

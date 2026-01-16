@@ -1,14 +1,13 @@
-/* eslint-disable */
-import { IExtensionApi } from "../../../types/IExtensionContext";
-import { IDownload } from "../../../types/IState";
+import type { IExtensionApi } from "../../../types/IExtensionContext";
+import type { IDownload } from "../../../types/IState";
 import {
   NotFound,
   ProcessCanceled,
   UserCanceled,
 } from "../../../util/CustomErrors";
 
-import { IDependency, ILookupResultEx } from "../types/IDependency";
-import {
+import type { IDependency, ILookupResultEx } from "../types/IDependency";
+import type {
   IDownloadHint,
   IFileListItem,
   IMod,
@@ -25,14 +24,15 @@ import { semverCoerce, truthy } from "../../../util/util";
 import Bluebird from "bluebird";
 import * as _ from "lodash";
 import minimatch from "minimatch";
-import { ILookupResult, IReference, IRule } from "modmeta-db";
+import type { ILookupResult, IReference, IRule } from "modmeta-db";
 import normalizeUrl from "normalize-url";
 import * as semver from "semver";
+import type { IModLookupInfo } from "./testModReference";
 import testModReference, {
-  IModLookupInfo,
   isFuzzyVersion,
   testRefByIdentifiers,
 } from "./testModReference";
+import { unknownToError } from "../../../shared/errors";
 
 interface IBrowserResult {
   url: string | (() => Bluebird<string>);
@@ -546,13 +546,14 @@ async function gatherDependenciesGraph(
     }
 
     return node;
-  } catch (err) {
-    if (!(err instanceof ProcessCanceled)) {
-      api.showErrorNotification("Failed to look up dependency", err, {
+  } catch (unknownErr) {
+    if (!(unknownErr instanceof ProcessCanceled)) {
+      api.showErrorNotification("Failed to look up dependency", unknownErr, {
         allowReport: false,
         message:
           rule.downloadHint?.url ?? rule.comment ?? rule.reference.description,
       });
+      const err = unknownToError(unknownErr);
       log("error", "failed to look up", {
         rule: JSON.stringify(rule),
         ex: err.name,

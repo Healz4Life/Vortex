@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   NEXUS_DOMAIN,
   NEXUS_FLAMEWORK_SUBDOMAIN,
@@ -8,7 +7,7 @@ import {
 } from "../extensions/nexus_integration/constants";
 
 import { TimeoutError } from "./CustomErrors";
-import { Normalize } from "./getNormalizeFunc";
+import type { Normalize } from "./getNormalizeFunc";
 import getVortexPath from "./getVortexPath";
 import { log } from "./log";
 
@@ -17,7 +16,7 @@ import { spawn } from "child_process";
 import * as _ from "lodash";
 import * as path from "path";
 import * as process from "process";
-import * as Redux from "redux";
+import type * as Redux from "redux";
 import { batch } from "redux-act";
 import * as semver from "semver";
 import * as tmp from "tmp";
@@ -175,11 +174,14 @@ export function objDiff(
   return res;
 }
 
-export function restackErr(error: Error, stackErr: Error): Error {
-  if (error === null || typeof error !== "object") {
-    return error;
+/** @deprecated */
+export function restackErr(error: unknown, stackErr: Error): Error {
+  if (!(error instanceof Error)) {
+    return stackErr;
   }
+
   const oldGetStack = error.stack;
+
   // resolve the stack at the last possible moment because stack is actually a getter
   // that will apply expensive source mapping when called
   Object.defineProperty(error, "stack", {
@@ -189,8 +191,9 @@ export function restackErr(error: Error, stackErr: Error): Error {
       oldGetStack +
       "\nPrior Context:\n" +
       (stackErr.stack ?? "").split("\n").slice(1).join("\n"),
-    set: () => null,
+    set: () => {},
   });
+
   return error;
 }
 
@@ -1016,21 +1019,24 @@ export function wrapExtCBAsync<ArgT extends any[], ResT>(
 ): (...args: ArgT) => Bluebird<ResT> {
   return (...args: ArgT): Bluebird<ResT> => {
     try {
-      return Bluebird.resolve(cb(...args)).catch?.((err) => {
+      return Bluebird.resolve(cb(...args)).catch?.((err: string | Error) => {
         if (typeof err === "string") {
           err = new Error(err);
         }
         if (extInfo !== undefined && !extInfo.official) {
-          err.allowReport = false;
-          err.extensionName = extInfo.name;
+          err["allowReport"] = false;
+          err["extensionName"] = extInfo.name;
         }
         return Promise.reject(err);
       });
     } catch (err) {
-      err.allowReport = false;
-      if (extInfo !== undefined && !extInfo.official) {
-        err.extensionName = extInfo.name;
+      if (err instanceof Error) {
+        err["allowReport"] = false;
+        if (extInfo !== undefined && !extInfo.official) {
+          err["extensionName"] = extInfo.name;
+        }
       }
+
       return Bluebird.reject(err);
     }
   };
@@ -1044,10 +1050,13 @@ export function wrapExtCBSync<ArgT extends any[], ResT>(
     try {
       return cb(...args);
     } catch (err) {
-      if (extInfo !== undefined && !extInfo.official) {
-        err.allowReport = false;
-        err.extensionName = extInfo.name;
+      if (err instanceof Error) {
+        if (extInfo !== undefined && !extInfo.official) {
+          err["allowReport"] = false;
+          err["extensionName"] = extInfo.name;
+        }
       }
+
       throw err;
     }
   };
@@ -1162,7 +1171,7 @@ const noInheritEnv: string[] = [
   "FORCE_ALLOW_ELEVATED_SYMLINKING",
   "HIGHLIGHT_I18N",
   "IS_PREVIEW_BUILD",
-  "NEXUS_NEXT_URL",
+  "NEXUS_GAMES_URL",
   "NODE_ENV",
   "NODE_OPTIONS",
   "SIMULATE_FS_ERRORS",

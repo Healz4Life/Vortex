@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   HTTPError,
   ProcessCanceled,
@@ -9,12 +8,12 @@ import makeRemoteCall from "../../util/electronRemote";
 import * as fs from "../../util/fs";
 import { log } from "../../util/log";
 import { delayed, INVALID_FILENAME_RE, truthy } from "../../util/util";
-import { IChunk } from "./types/IChunk";
-import { IDownloadOptions } from "./types/IDownload";
-import { IDownloadJob } from "./types/IDownloadJob";
-import { IDownloadResult } from "./types/IDownloadResult";
-import { ProgressCallback } from "./types/ProgressCallback";
-import {
+import type { IChunk } from "./types/IChunk";
+import type { IDownloadOptions } from "./types/IDownload";
+import type { IDownloadJob } from "./types/IDownloadJob";
+import type { IDownloadResult } from "./types/IDownloadResult";
+import type { ProgressCallback } from "./types/ProgressCallback";
+import type {
   IProtocolHandlers,
   IResolvedURL,
   IResolvedURLs,
@@ -24,6 +23,7 @@ import makeThrottle from "./util/throttle";
 
 import FileAssembler from "./FileAssembler";
 import SpeedCalculator from "./SpeedCalculator";
+import { setDownloadFilePath } from "./actions/state";
 
 import Bluebird from "bluebird";
 import * as contentDisposition from "content-disposition";
@@ -32,11 +32,12 @@ import * as http from "http";
 import * as https from "https";
 import * as _ from "lodash";
 import * as path from "path";
-import * as stream from "stream";
+import type * as stream from "stream";
 import * as zlib from "zlib";
-import { IExtensionApi } from "../../types/api";
+import type { IExtensionApi } from "../../types/api";
 
 import { simulateHttpError } from "./debug/simulateHttpError";
+import { getErrorMessageOrDefault, unknownToError } from "../../shared/errors";
 
 const getCookies = makeRemoteCall(
   "get-cookies",
@@ -106,7 +107,10 @@ function contentTypeStr(
   try {
     return contentType.parse(input).type;
   } catch (err) {
-    log("error", "failed to parse content type", { input, error: err.message });
+    log("error", "failed to parse content type", {
+      input,
+      error: getErrorMessageOrDefault(err),
+    });
     return "application/octet-stream";
   }
 }
@@ -426,7 +430,8 @@ class DownloadWorker {
       parsed = new URL(urlIn);
       referer = refererIn;
       jobUrlString = urlIn;
-    } catch (err) {
+    } catch (unknownErr) {
+      const err = unknownToError(unknownErr);
       const errorMsg = `Invalid URL format: ${err.message} (URL: ${jobUrlString}, original type: ${typeof jobUrl})`;
       log("error", "URL parsing failed in startDownload", {
         workerId: job.workerId || "unknown",
@@ -502,7 +507,7 @@ class DownloadWorker {
         } catch (err) {
           log("warn", "URL encoding failed, using original", {
             url: jobUrlString,
-            error: err.message,
+            error: getErrorMessageOrDefault(err),
           });
           recodedURI = jobUrlString;
         }
@@ -529,7 +534,11 @@ class DownloadWorker {
             str = str.pipe(inflate);
           }
         } catch (err) {
-          log("error", "stream pipeline setup failed", err.message);
+          log(
+            "error",
+            "stream pipeline setup failed",
+            getErrorMessageOrDefault(err),
+          );
           this.handleError(err);
           return;
         }
@@ -973,7 +982,7 @@ class DownloadWorker {
         } catch (err) {
           log("warn", "failed to parse content disposition", {
             "content-disposition": cd,
-            message: err.message,
+            message: getErrorMessageOrDefault(err),
           });
         }
       }
@@ -1717,8 +1726,8 @@ class DownloadManager {
   };
 
   private tickQueue(verbose: boolean = true) {
-    let busyWorkerIds = Object.keys(this.mBusyWorkers);
-    let busyCount = busyWorkerIds.reduce((count, key) => {
+    const busyWorkerIds = Object.keys(this.mBusyWorkers);
+    const busyCount = busyWorkerIds.reduce((count, key) => {
       const worker = this.mBusyWorkers[key];
       return (
         count + (this.mSlowWorkers[key] == null && !worker.isPending() ? 1 : 0)
@@ -2178,23 +2187,68 @@ class DownloadManager {
       download.finalName = newName;
       newName
         .then((resolvedName) => {
+          const oldTempName = download.tempName;
+          download.tempName = resolvedName;
+
           if (!download.assembler.isClosed()) {
-            const oldTempName = download.tempName;
-            download.tempName = resolvedName;
             return download.assembler
               .rename(resolvedName)
               .then(() => {
                 download.finalName = newName;
               })
               .catch((err) => {
-                // if we failed to rename we will try to continue writing to the original file
-                // so reset to the original name and remove the temporary one that got reserved
-                // for the rename
+                // If file is closed, fall back to fs.renameAsync
+                if (
+                  err instanceof ProcessCanceled &&
+                  err.message === "File is closed"
+                ) {
+                  return fs
+                    .renameAsync(oldTempName, resolvedName)
+                    .then(() => {
+                      download.finalName = newName;
+                      // Update Redux state with the new file path
+                      const newFileName = path.basename(resolvedName);
+                      this.mApi.store.dispatch(
+                        setDownloadFilePath(download.id, newFileName),
+                      );
+                    })
+                    .catch((fsErr) => {
+                      // Reset to original name
+                      download.tempName = oldTempName;
+                      return fs
+                        .removeAsync(resolvedName)
+                        .catch(() => null)
+                        .then(() => Bluebird.reject(fsErr));
+                    });
+                }
+                // For other errors, reset to original name and reject
                 download.tempName = oldTempName;
                 return fs
                   .removeAsync(resolvedName)
                   .catch(() => null)
                   .then(() => Bluebird.reject(err));
+              });
+          } else {
+            // File is already closed (download finished), rename directly using fs
+            return fs
+              .renameAsync(oldTempName, resolvedName)
+              .then(() => {
+                download.finalName = newName;
+                // Update Redux state with the new file path
+                const newFileName = path.basename(resolvedName);
+                this.mApi.store.dispatch(
+                  setDownloadFilePath(download.id, newFileName),
+                );
+              })
+              .catch((err) => {
+                // Don't reject - just log the error
+                log("warn", "failed to rename closed download file", {
+                  error: err.message,
+                  from: oldTempName,
+                  to: resolvedName,
+                });
+                // Reset to original name
+                download.tempName = oldTempName;
               });
           }
         })
@@ -2716,7 +2770,7 @@ class DownloadManager {
     } catch (err) {
       log("warn", "failed to read file for magic header detection", {
         filePath,
-        error: err.message,
+        error: getErrorMessageOrDefault(err),
       });
       return null;
     }

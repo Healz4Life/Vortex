@@ -1,7 +1,7 @@
 import { startActivity, stopActivity } from "../../actions/session";
-import { IDialogResult } from "../../types/IDialog";
-import { IExtensionApi } from "../../types/IExtensionContext";
-import { IModTable, IProfile, IState } from "../../types/IState";
+import type { IDialogResult } from "../../types/IDialog";
+import type { IExtensionApi } from "../../types/IExtensionContext";
+import type { IModTable, IProfile, IState } from "../../types/IState";
 import { getApplication } from "../../util/application";
 import {
   DataInvalid,
@@ -11,7 +11,8 @@ import {
 } from "../../util/CustomErrors";
 import { setErrorContext } from "../../util/errorHandling";
 import * as fs from "../../util/fs";
-import getNormalizeFunc, { Normalize } from "../../util/getNormalizeFunc";
+import type { Normalize } from "../../util/getNormalizeFunc";
+import getNormalizeFunc from "../../util/getNormalizeFunc";
 import { log } from "../../util/log";
 import { showError } from "../../util/message";
 import { downloadPathForGame } from "../../util/selectors";
@@ -19,16 +20,19 @@ import { getSafe } from "../../util/storeHelper";
 import { batchDispatch, truthy } from "../../util/util";
 import { knownGames } from "../../util/selectors";
 
-import { IDownload } from "../download_management/types/IDownload";
+import type { IDownload } from "../download_management/types/IDownload";
 import { activeGameId, activeProfile } from "../profile_management/selectors";
 import { convertGameIdReverse } from "../nexus_integration/util/convertGameId";
 
 import { setDeploymentNecessary } from "./actions/deployment";
 import { addMod, removeMod } from "./actions/mods";
 import { setActivator } from "./actions/settings";
-import { IDeploymentManifest } from "./types/IDeploymentManifest";
-import { IDeployedFile, IDeploymentMethod } from "./types/IDeploymentMethod";
-import { IMod, IModRule } from "./types/IMod";
+import type { IDeploymentManifest } from "./types/IDeploymentManifest";
+import type {
+  IDeployedFile,
+  IDeploymentMethod,
+} from "./types/IDeploymentMethod";
+import type { IMod, IModRule } from "./types/IMod";
 import {
   getManifest,
   loadActivation,
@@ -48,22 +52,23 @@ import { getModType } from "../gamemode_management/util/modTypeExtensions";
 import { setModsEnabled } from "../profile_management/actions/profiles";
 
 import { setInstallPath } from "./actions/settings";
-import { IInstallOptions } from "./types/IInstallOptions";
-import { IRemoveModOptions } from "./types/IRemoveModOptions";
+import type { IInstallOptions } from "./types/IInstallOptions";
+import type { IRemoveModOptions } from "./types/IRemoveModOptions";
 import allTypesSupported from "./util/allTypesSupported";
 import { genSubDirFunc, purgeMods } from "./util/deploy";
 import modName from "./util/modName";
 import queryGameId from "./util/queryGameId";
 import refreshMods from "./util/refreshMods";
 
-import InstallManager from "./InstallManager";
+import type InstallManager from "./InstallManager";
 import { currentActivator, installPath, installPathForGame } from "./selectors";
 import { ensureStagingDirectory } from "./stagingDirectory";
 
 import Promise from "bluebird";
 import * as _ from "lodash";
-import { RuleType } from "modmeta-db";
+import type { RuleType } from "modmeta-db";
 import * as path from "path";
+import { getErrorMessageOrDefault } from "../../shared/errors";
 
 function checkStagingGame(
   api: IExtensionApi,
@@ -964,7 +969,7 @@ export function onRemoveMods(
             log("error", "Failed to remove mod", {
               game: gameId,
               mod: mod.id,
-              error: error.message,
+              error: getErrorMessageOrDefault(error),
             });
           }
         },
@@ -982,7 +987,7 @@ export function onRemoveMods(
       } else {
         api.showErrorNotification(
           "Failed to undeploy mod, please try again",
-          err.message,
+          getErrorMessageOrDefault(err),
           { allowReport: false },
         );
       }
@@ -1136,7 +1141,7 @@ export async function onStartInstallDownload(
       fileSize: stats.size,
     });
   } catch (accessError) {
-    const message = `Download file not accessible for installation: ${accessError.message}`;
+    const message = `Download file not accessible for installation: ${getErrorMessageOrDefault(accessError)}`;
     log("warn", message, { downloadId, filePath: path.basename(fullPath) });
     if (callback !== undefined) {
       callback(new DataInvalid(message), undefined);

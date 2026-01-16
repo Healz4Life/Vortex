@@ -1,7 +1,6 @@
-/* eslint-disable */
 import * as http from "node:http";
 import * as https from "node:https";
-import { AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import * as querystring from "node:querystring";
 import * as url from "node:url";
 import { log } from "../../../util/log";
@@ -12,6 +11,7 @@ import {
 } from "../constants";
 import NEXUSMODS_LOGO from "./nexusmodslogo";
 import { ArgumentInvalid } from "../../../util/CustomErrors";
+import { unknownToError } from "../../../shared/errors";
 
 type TokenType = "Bearer";
 
@@ -39,9 +39,8 @@ interface IOAuthServerSettings {
   getRedirectUrl?: (port: number) => string; // New way to get redirect URL
 }
 
-/* eslint-disable max-len */
 function makeResultPage(success: boolean) {
-  var html = [];
+  const html = [];
 
   html.push(
     `<!DOCTYPE html>
@@ -84,7 +83,6 @@ function makeResultPage(success: boolean) {
 
   return html.join("");
 }
-/* eslint-enable max-len */
 
 /**
  * deals with token exchange for OAuth2
@@ -150,7 +148,8 @@ class OAuth {
       try {
         const tokenReply = await this.sentAuthorizeToken(code);
         this.mStates[state]?.(null, tokenReply);
-      } catch (err) {
+      } catch (unknownError) {
+        const err = unknownToError(unknownError);
         this.mStates[state]?.(err, undefined);
       }
       delete this.mStates[state];

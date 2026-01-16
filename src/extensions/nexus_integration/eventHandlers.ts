@@ -1,10 +1,9 @@
-/* eslint-disable */
 import { setDownloadModInfo } from "../../actions";
-import {
+import type {
   IExtensionApi,
   StateChangeCallback,
 } from "../../types/IExtensionContext";
-import { IDownload, IMod, IModTable, IState } from "../../types/IState";
+import type { IDownload, IMod, IModTable, IState } from "../../types/IState";
 import {
   DataInvalid,
   ProcessCanceled,
@@ -32,9 +31,9 @@ import {
   DownloadIsHTML,
 } from "../download_management/DownloadManager";
 import { SITE_ID } from "../gamemode_management/constants";
-import { IGameStoredExt } from "../gamemode_management/types/IGameStored";
+import type { IGameStoredExt } from "../gamemode_management/types/IGameStored";
 import { setUpdatingMods } from "../mod_management/actions/session";
-import { IModListItem } from "../news_dashlet/types";
+import type { IModListItem } from "../news_dashlet/types";
 
 import { setUserInfo } from "./actions/persistent";
 import { findLatestUpdate, retrieveModInfo } from "./util/checkModsVersion";
@@ -48,10 +47,15 @@ import {
   FULL_REVISION_INFO,
   CURRENT_REVISION_INFO,
   COLLECTION_SEARCH_QUERY,
+  MOD_REQUIREMENTS_INFO,
 } from "./util/graphQueries";
 import submitFeedback from "./util/submitFeedback";
 
-import { NEXUS_BASE_URL, NEXUS_NEXT_URL, USERINFO_ENDPOINT } from "./constants";
+import {
+  NEXUS_BASE_URL,
+  NEXUS_GAMES_URL,
+  USERINFO_ENDPOINT,
+} from "./constants";
 import {
   checkModVersionsImpl,
   endorseDirectImpl,
@@ -65,7 +69,7 @@ import {
   updateToken,
 } from "./util";
 
-import Nexus, {
+import type {
   EndorsedStatus,
   ICollection,
   ICollectionManifest,
@@ -78,22 +82,27 @@ import Nexus, {
   IIssue,
   IModFileContentPage,
   IModInfo,
+  IModRequirements,
   IRating,
   IRevision,
-  NexusError,
   IModFileContentPageQuery,
   IModFileContentSearchFilter,
-  RateLimitError,
-  TimeoutError,
   IPreferenceQuery,
   IPreference,
 } from "@nexusmods/nexus-api";
+import type Nexus from "@nexusmods/nexus-api";
+import { NexusError, RateLimitError, TimeoutError } from "@nexusmods/nexus-api";
 import Bluebird from "bluebird";
 import * as path from "path";
 import * as semver from "semver";
-import { ITokenReply } from "./util/oauth";
+import type { ITokenReply } from "./util/oauth";
 import { isLoggedIn } from "./selectors";
-import { IValidateKeyDataV2 } from "./types/IValidateKeyData";
+import type { IValidateKeyDataV2 } from "./types/IValidateKeyData";
+import {
+  getErrorCode,
+  getErrorMessageOrDefault,
+  unknownToError,
+} from "../../shared/errors";
 
 export function onChangeDownloads(api: IExtensionApi, nexus: Nexus) {
   const state: IState = api.store.getState();
@@ -189,7 +198,7 @@ export function onChangeDownloads(api: IExtensionApi, nexus: Nexus) {
                   modId,
                   gameDomain,
                   downloadId: dlId,
-                  message: err.message,
+                  message: getErrorMessageOrDefault(err),
                 });
                 return null;
               });
@@ -209,7 +218,7 @@ export function onChangeDownloads(api: IExtensionApi, nexus: Nexus) {
                     fileId,
                     gameDomain,
                     downloadId: dlId,
-                    message: err.message,
+                    message: getErrorMessageOrDefault(err),
                   });
                   return null;
                 });
@@ -351,7 +360,7 @@ export function onOpenCollectionPage(api: IExtensionApi) {
     }
     const game = gameById(api.store.getState(), gameId);
     const segments = [
-      NEXUS_NEXT_URL,
+      NEXUS_GAMES_URL,
       nexusGameId(game) || gameId,
       "collections",
       collectionSlug,
@@ -396,7 +405,7 @@ export function onRequestOwnIssues(nexus: Nexus) {
       .then((issues) => {
         cb(null, issues);
       })
-      .catch((err) => cb(err));
+      .catch((err) => cb(unknownToError(err)));
   };
 }
 
@@ -725,9 +734,10 @@ export function onGetMyCollections(
 
       return revisions;
     } catch (err) {
-      if (!["NOT_FOUND", "UNAUTHORIZED"].includes(err.code)) {
+      const code = getErrorCode(err);
+      if (!["NOT_FOUND", "UNAUTHORIZED"].includes(code)) {
         api.showErrorNotification("Failed to get list of collections", err, {
-          allowReport: !["MODEL_NOT_FOUND"].includes(err.code),
+          allowReport: !["MODEL_NOT_FOUND"].includes(code),
         });
       }
       return [];
@@ -991,6 +1001,52 @@ export function onModFileContents(
   };
 }
 
+/**
+ * Fetches mod requirements (dependencies) from the Nexus Mods API.
+ *
+ * @param api - The extension API
+ * @param nexus - The Nexus API client
+ * @returns A function that accepts gameId and modId and returns mod requirements
+ *
+ */
+export function onGetModRequirements(
+  api: IExtensionApi,
+  nexus: Nexus,
+): (gameId: string, modId: number) => Bluebird<Partial<IModRequirements>> {
+  return (gameId: string, modId: number) => {
+    const state = api.getState();
+    const game = gameById(state, gameId);
+    const nexusGameDomain = nexusGameId(game, gameId) || gameId;
+
+    return Bluebird.resolve(
+      nexus.modRequirements(MOD_REQUIREMENTS_INFO, modId, nexusGameDomain),
+    ).catch((err) => {
+      if (err instanceof RateLimitError) {
+        log("warn", "Rate limited when fetching mod requirements", {
+          gameId: nexusGameDomain,
+          modId,
+        });
+      } else if (err instanceof TimeoutError) {
+        log("warn", "Timeout when fetching mod requirements", {
+          gameId: nexusGameDomain,
+          modId,
+        });
+      } else {
+        const detail = processErrorMessage(err);
+        api.showErrorNotification("Failed to get mod requirements", detail, {
+          allowReport: detail.noReport ? false : true,
+        });
+      }
+
+      return Bluebird.resolve({
+        dlcRequirements: [],
+        nexusRequirements: { nodes: [], nodesCount: 0, totalCount: 0 },
+        modsRequiringThisMod: { nodes: [], nodesCount: 0, totalCount: 0 },
+      });
+    });
+  };
+}
+
 export function onGetUserKeyData(
   api: IExtensionApi,
 ): (...args: any[]) => Promise<IValidateKeyDataV2> {
@@ -1239,7 +1295,7 @@ export function onSubmitCollection(nexus: Nexus) {
         sendCollection(nexus, collectionInfo, collectionId, uuid),
       )
       .then((response) => callback(null, response))
-      .catch((err) => callback(err));
+      .catch((err) => callback(unknownToError(err)));
   };
 }
 

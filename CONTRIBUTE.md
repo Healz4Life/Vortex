@@ -148,6 +148,8 @@ There is a `flake.nix` that provides all required dependencies: `node`, `yarn`, 
 - Build: `yarn build`
 - Start: `yarn start`
 
+**Debugging (Nix):** start VS Code from `nix develop` (or via direnv), then use `Debug Electron (System Electron)` to launch the system Electron from your Nix shell `PATH`.
+
 ## Editor Setup
 
 ### VS Code
@@ -158,3 +160,7 @@ Install the recommended workspace extensions when prompted, or manually install:
 - [Prettier](https://marketplace.visualstudio.com/items?itemName=prettier.prettier-vscode) - code formatting
 
 These are configured in `.vscode/extensions.json`.
+
+## Debugging
+
+See `docs/DEBUGGING-GUIDE.md` for VS Code launch profiles, main/renderer debugging, and troubleshooting tips.

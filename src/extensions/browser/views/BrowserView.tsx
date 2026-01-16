@@ -6,8 +6,8 @@ import {
   WebviewEmbed,
   WebviewOverlay,
 } from "../../../renderer/controls/Webview";
-import { INotification } from "../../../types/INotification";
-import { IState } from "../../../types/IState";
+import type { INotification } from "../../../types/INotification";
+import type { IState } from "../../../types/IState";
 import {
   ComponentEx,
   connect,
@@ -26,9 +26,10 @@ import * as _ from "lodash";
 import * as React from "react";
 import { Breadcrumb, Button } from "react-bootstrap";
 import * as ReactDOM from "react-dom";
-import * as Redux from "redux";
-import { ThunkDispatch } from "redux-thunk";
+import type * as Redux from "redux";
+import type { ThunkDispatch } from "redux-thunk";
 import * as nodeUrl from "url";
+import { getErrorMessageOrDefault } from "../../../shared/errors";
 
 export type SubscriptionResult = "close" | "continue" | "ignore";
 
@@ -451,7 +452,7 @@ class BrowserView extends ComponentEx<IProps, IComponentState> {
       } catch (err) {
         log("warn", "failed to navigate", {
           url: history[newPos],
-          error: err.message,
+          error: getErrorMessageOrDefault(err),
         });
       }
     }
@@ -468,7 +469,7 @@ class BrowserView extends ComponentEx<IProps, IComponentState> {
       } catch (err) {
         log("warn", "failed to navigate", {
           url: history[newPos],
-          error: err.message,
+          error: getErrorMessageOrDefault(err),
         });
       }
     }
@@ -495,7 +496,10 @@ class BrowserView extends ComponentEx<IProps, IComponentState> {
     try {
       this.mRef.loadURL(nextUrl);
     } catch (err) {
-      log("warn", "failed to navigate", { url: nextUrl, error: err.message });
+      log("warn", "failed to navigate", {
+        url: nextUrl,
+        error: getErrorMessageOrDefault(err),
+      });
     }
   };
 

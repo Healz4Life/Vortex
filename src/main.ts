@@ -136,7 +136,7 @@ if (process.platform === "win32" && process.env.NODE_ENV !== "development") {
 
 // Produce english error messages (windows only atm), otherwise they don't get
 // grouped correctly when reported through our feedback system
-import * as winapiT from "winapi-bindings";
+import type * as winapiT from "winapi-bindings";
 
 try {
   // tslint:disable-next-line:no-var-requires
@@ -165,9 +165,10 @@ import "./util/exeIcon";
 import "./util/monkeyPatching";
 import "./util/webview";
 
-import * as child_processT from "child_process";
+import type * as child_processT from "child_process";
 import * as fs from "./util/fs";
 import presetManager from "./util/PresetManager";
+import { getErrorMessage } from "./shared/errors";
 
 process.env.Path = process.env.Path + path.delimiter + __dirname;
 
@@ -190,7 +191,7 @@ async function firstTimeInit() {
 
 async function main(): Promise<void> {
   // important: The following has to be synchronous!
-  let mainArgs = commandLine(process.argv, false);
+  const mainArgs = commandLine(process.argv, false);
   if (mainArgs.report) {
     return sendReportFile(mainArgs.report).then(() => {
       app.quit();
@@ -300,7 +301,7 @@ async function main(): Promise<void> {
 
   try {
     await fs.statAsync(getVortexPath("userData"));
-  } catch (err) {
+  } catch {
     await firstTimeInit();
   }
 
@@ -318,16 +319,18 @@ async function main(): Promise<void> {
   try {
     require("@electron/remote/main").initialize();
   } catch (err) {
-    if (!err.message.includes("already been initialized")) {
+    const message = getErrorMessage(err);
+    if (message && !message.includes("already been initialized")) {
       throw err;
     }
+
     // @electron/remote already initialized, continue
   }
 
   let fixedT = require("i18next").getFixedT("en");
   try {
     fixedT("dummy");
-  } catch (err) {
+  } catch {
     fixedT = (input) => input;
   }
 

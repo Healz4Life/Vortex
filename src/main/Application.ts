@@ -6,22 +6,19 @@ import {
 } from "../actions/app";
 import { NEXUS_DOMAIN } from "../extensions/nexus_integration/constants";
 import { STATE_BACKUP_PATH } from "../reducers/index";
-import { ThunkStore } from "../types/IExtensionContext";
+import type { ThunkStore } from "../types/IExtensionContext";
 import type { IPresetStep, IPresetStepHydrateState } from "../types/IPreset";
-import { IState } from "../types/IState";
+import type { IState } from "../types/IState";
 import { getApplication } from "../util/application";
-import commandLine, {
-  IParameters,
-  ISetItem,
-  relaunch,
-} from "../util/commandLine";
+import type { IParameters, ISetItem } from "../util/commandLine";
+import commandLine, { relaunch } from "../util/commandLine";
 import {
   DataInvalid,
   DocumentsPathMissing,
   ProcessCanceled,
   UserCanceled,
 } from "../util/CustomErrors";
-import * as develT from "../util/devel";
+import type * as develT from "../util/devel";
 import {
   didIgnoreError,
   disableErrorReport,
@@ -31,17 +28,17 @@ import {
   terminate,
   toError,
 } from "../util/errorHandling";
-import ExtensionManagerT from "../util/ExtensionManager";
+import type ExtensionManagerT from "../util/ExtensionManager";
 import { validateFiles } from "../util/fileValidation";
 import * as fs from "../util/fs";
 import getVortexPath, { setVortexPath } from "../util/getVortexPath";
 import lazyRequire from "../util/lazyRequire";
-import LevelPersist, { DatabaseLocked } from "../util/LevelPersist";
+import LevelPersist, { DatabaseLocked } from "../store/LevelPersist";
 import { log, setLogPath, setupLogging } from "../util/log";
 import { prettifyNodeErrorMessage, showError } from "../util/message";
 import migrate from "../util/migrate";
 import presetManager from "../util/PresetManager";
-import { StateError } from "../util/reduxSanity";
+import type { StateError } from "../store/reduxSanity";
 import startupSettings from "../util/startupSettings";
 import {
   allHives,
@@ -54,9 +51,9 @@ import {
   insertPersistor,
   markImported,
   querySanitize,
-} from "../util/store";
+} from "../store/store";
 import {} from "../util/storeHelper";
-import SubPersistor from "../util/SubPersistor";
+import SubPersistor from "../store/SubPersistor";
 import {
   isMajorDowngrade,
   replaceRecursive,
@@ -67,23 +64,17 @@ import {
 
 import { addNotification, setCommandLine, showDialog } from "../actions";
 
-import MainWindowT from "./MainWindow";
-import SplashScreenT from "./SplashScreen";
-import TrayIconT from "./TrayIcon";
+import type MainWindowT from "./MainWindow";
+import type SplashScreenT from "./SplashScreen";
+import type TrayIconT from "./TrayIcon";
 
-import * as msgpackT from "@msgpack/msgpack";
+import type * as msgpackT from "@msgpack/msgpack";
 import Promise from "bluebird";
-import crashDumpT from "crash-dump";
-import {
-  app,
-  crashReporter as crashReporterT,
-  dialog,
-  ipcMain,
-  protocol,
-  shell,
-} from "electron";
+import type crashDumpT from "crash-dump";
+import type { crashReporter as crashReporterT } from "electron";
+import { app, dialog, ipcMain, protocol, shell } from "electron";
 import contextMenu from "electron-context-menu";
-import isAdmin = require("is-admin");
+import isAdmin from "is-admin";
 import * as _ from "lodash";
 import * as os from "os";
 import * as path from "path";
@@ -92,6 +83,11 @@ import * as semver from "semver";
 import type * as uuidT from "uuid";
 
 import type * as winapiT from "winapi-bindings";
+import {
+  getErrorCode,
+  getErrorMessageOrDefault,
+  unknownToError,
+} from "../shared/errors";
 
 const uuid = lazyRequire<typeof uuidT>(() => require("uuid"));
 const permissions = lazyRequire<typeof permissionsT>(() =>
@@ -404,7 +400,7 @@ class Application {
           return this.createStore(args.restore, args.merge).catch(
             DataInvalid,
             (err) => {
-              log("error", "store data invalid", err.message);
+              log("error", "store data invalid", getErrorMessageOrDefault(err));
               dialog
                 .showMessageBox(getVisibleWindow(), {
                   type: "error",
@@ -464,7 +460,13 @@ class Application {
           this.connectTrayAndWindow();
           return splash !== undefined ? splash.fadeOut() : Promise.resolve();
         })
-        .tapCatch((err) => log("debug", "quitting with exception", err.message))
+        .tapCatch((err) =>
+          log(
+            "debug",
+            "quitting with exception",
+            getErrorMessageOrDefault(err),
+          ),
+        )
         .catch(UserCanceled, () => app.exit())
         .catch(ProcessCanceled, () => {
           app.quit();
@@ -509,10 +511,10 @@ class Application {
           );
           app.quit();
         })
-        .catch((err) => {
+        .catch((unknownError) => {
           try {
-            if (err instanceof Error) {
-              const pretty = prettifyNodeErrorMessage(err);
+            if (unknownError instanceof Error) {
+              const pretty = prettifyNodeErrorMessage(unknownError);
               const details = pretty.message.replace(
                 /{{ *([a-zA-Z]+) *}}/g,
                 (m, key) => pretty.replace?.[key] || key,
@@ -522,12 +524,13 @@ class Application {
                   message: "Startup failed",
                   details,
                   code: pretty.code,
-                  stack: err.stack,
+                  stack: unknownError.stack,
                 },
                 this.mStore !== undefined ? this.mStore.getState() : {},
                 pretty.allowReport,
               );
             } else {
+              const err = unknownToError(unknownError);
               terminate(
                 {
                   message: "Startup failed",
@@ -758,13 +761,13 @@ class Application {
                 process.stdout.write(output.join("\n") + "\n");
               })
               .catch((err) => {
-                process.stderr.write(err.message + "\n");
+                process.stderr.write(getErrorMessageOrDefault(err) + "\n");
               });
           }),
         ).then(() => null);
       })
       .catch((err) => {
-        process.stderr.write(err.message + "\n");
+        process.stderr.write(getErrorMessageOrDefault(err) + "\n");
       })
       .finally(() => {
         persist.close();
@@ -798,13 +801,13 @@ class Application {
                 process.stdout.write("changed\n");
               })
               .catch((err) => {
-                process.stderr.write(err.message + "\n");
+                process.stderr.write(getErrorMessageOrDefault(err) + "\n");
               });
           }),
         ).then(() => null);
       })
       .catch((err) => {
-        process.stderr.write(err.message + "\n");
+        process.stderr.write(getErrorMessageOrDefault(err) + "\n");
       })
       .finally(() => {
         persist.close();
@@ -834,7 +837,7 @@ class Application {
                     process.stdout.write(`removed ${match.join(".")}\n`),
                   )
                   .catch((err) => {
-                    process.stderr.write(err.message + "\n");
+                    process.stderr.write(getErrorMessageOrDefault(err) + "\n");
                   }),
               ),
             );
@@ -842,7 +845,7 @@ class Application {
         ).then(() => null);
       })
       .catch((err) => {
-        process.stderr.write(err.message + "\n");
+        process.stderr.write(getErrorMessageOrDefault(err) + "\n");
       })
       .finally(() => {
         persist.close();
@@ -867,14 +870,16 @@ class Application {
       try {
         fs.ensureDirSync(muPath);
       } catch (err) {
+        const code = getErrorCode(err);
         // not sure why this would happen, ensureDir isn't supposed to report a problem if
         // the directory exists, but there was a single report of EEXIST in this place.
         // Probably a bug related to the filesystem used in C:\ProgramData, we had similar
         // problems with OneDrive paths
-        if (err.code !== "EEXIST") {
+        if (code !== "EEXIST") {
           throw err;
         }
       }
+
       return muPath;
     } else {
       log("error", "Multi-User mode not implemented outside windows");
@@ -903,7 +908,7 @@ class Application {
           backups = backupsIn;
         })
         .catch((err) => {
-          log("error", "failed to read backups", err.message);
+          log("error", "failed to read backups", getErrorMessageOrDefault(err));
           backups = [];
         });
 
@@ -1067,8 +1072,8 @@ class Application {
                 {
                   message: "Failed to restore backup",
                   details:
-                    err.code !== "ENOENT"
-                      ? err.message
+                    getErrorCode(err) !== "ENOENT"
+                      ? getErrorMessageOrDefault(err)
                       : "Specified backup file doesn't exist",
                   path: restoreBackup,
                 },
@@ -1094,8 +1099,8 @@ class Application {
                 {
                   message: "Failed to merge backup",
                   details:
-                    err.code !== "ENOENT"
-                      ? err.message
+                    getErrorCode(err) !== "ENOENT"
+                      ? getErrorMessageOrDefault(err)
                       : "Specified backup file doesn't exist",
                   path: mergeBackup,
                 },
@@ -1225,7 +1230,7 @@ class Application {
               log(
                 "error",
                 "Failed to create startup state backup",
-                err.message,
+                getErrorMessageOrDefault(err),
               ),
             );
         }

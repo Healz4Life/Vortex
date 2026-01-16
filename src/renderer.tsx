@@ -71,12 +71,16 @@ import ExtensionManager from "./util/ExtensionManager";
 import { ExtensionContext } from "./util/ExtensionProvider";
 import { setTFunction } from "./util/fs";
 import GlobalNotifications from "./util/GlobalNotifications";
-import getI18n, { changeLanguage, fallbackTFunc, TFunction } from "./util/i18n";
+import getI18n, {
+  changeLanguage,
+  fallbackTFunc,
+  type TFunction,
+} from "./util/i18n";
 import { log } from "./util/log";
 import { initApplicationMenu } from "./util/menu";
 import { showError } from "./util/message";
 import "./util/monkeyPatching";
-import { reduxSanity, StateError } from "./util/reduxSanity";
+import { reduxSanity, StateError } from "./store/reduxSanity";
 import LoadingScreen from "./renderer/views/LoadingScreen";
 import MainWindow from "./renderer/views/MainWindow";
 
@@ -104,20 +108,21 @@ import { generate as shortid } from "shortid";
 import crashDumpT from "crash-dump";
 
 import { setLanguage, setNetworkConnected } from "./actions";
-import { ThunkStore } from "./types/IExtensionContext";
-import { IState } from "./types/IState";
+import type { ThunkStore } from "./types/IExtensionContext";
+import type { IState } from "./types/IState";
 import { relaunch } from "./util/commandLine";
 import { UserCanceled } from "./util/CustomErrors";
 import {} from "./util/extensionRequire";
 import getVortexPath, { setVortexPath } from "./util/getVortexPath";
 import presetManager from "./util/PresetManager";
-import { reduxLogger } from "./util/reduxLogger";
+import { reduxLogger } from "./store/reduxLogger";
 import { getSafe } from "./util/storeHelper";
 import {
   bytesToString,
   getAllPropertyNames,
   replaceRecursive,
 } from "./util/util";
+import { getErrorCode, getErrorMessageOrDefault } from "./shared/errors";
 
 log("debug", "renderer process started", { pid: process["pid"] });
 
@@ -765,11 +770,12 @@ function renderer(extensions: ExtensionManager) {
             i18n.addResources("en", ext.name, JSON.parse(fileData));
           })
           .catch((err) => {
-            if (err.code !== "ENOENT") {
+            const code = getErrorCode(err);
+            if (code !== "ENOENT") {
               // an extension not providing a locale file is ok
               log("error", "Failed to load translation", {
                 filePath,
-                error: err.message,
+                error: getErrorMessageOrDefault(err),
               });
             }
           });

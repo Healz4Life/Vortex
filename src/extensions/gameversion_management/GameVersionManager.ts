@@ -1,13 +1,14 @@
-import { IExtensionApi } from "../../types/IExtensionContext";
-import { IGame } from "../../types/IGame";
+import type { IExtensionApi } from "../../types/IExtensionContext";
+import type { IGame } from "../../types/IGame";
 import { ProcessCanceled } from "../../util/CustomErrors";
 import { truthy } from "../../util/util";
-import { IDiscoveryResult } from "../gamemode_management/types/IDiscoveryResult";
-import { IGameVersionProvider } from "./types/IGameVersionProvider";
+import type { IDiscoveryResult } from "../gamemode_management/types/IDiscoveryResult";
+import type { IGameVersionProvider } from "./types/IGameVersionProvider";
 
 import { log } from "../../util/log";
 
 import { getExecGameVersion } from "./util/getGameVersion";
+import { unknownToError } from "../../shared/errors";
 
 export default class GameVersionManager {
   private mApi: IExtensionApi;
@@ -43,7 +44,8 @@ export default class GameVersionManager {
     try {
       const version = await provider.getGameVersion(game, discovery);
       return Promise.resolve(version);
-    } catch (err) {
+    } catch (unknownErr) {
+      const err = unknownToError(unknownErr);
       // fallback
       log("warn", "extension getGameVersion call failed", {
         message: err.message,
