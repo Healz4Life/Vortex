@@ -15,7 +15,7 @@ import { getErrorMessageOrDefault } from "../shared/errors";
 
 import safeCreateAction from "./safeCreateAction";
 
-import Promise from "bluebird";
+import PromiseBB from "bluebird";
 import { ipcMain, ipcRenderer } from "electron";
 
 import * as reduxAct from "redux-act";
@@ -60,7 +60,7 @@ export const addDialog = safeCreateAction(
     type: string,
     title: string,
     content: IDialogContent,
-    defaultAction: string,
+    defaultAction: string | undefined,
     actions: string[],
   ) => ({ id, type, title, content, defaultAction, actions }),
 );
@@ -162,7 +162,7 @@ export function addNotification(notification: INotification) {
     const noti = { ...notification };
 
     if (noti.id !== undefined && suppressNotification(noti.id)) {
-      return Promise.resolve();
+      return PromiseBB.resolve();
     }
 
     if (noti.id === undefined) {
@@ -191,11 +191,13 @@ export function addNotification(notification: INotification) {
     })) as any;
 
     dispatch(startNotification(storeNoti));
-    if (noti.displayMS !== undefined) {
-      return new Promise((resolve) => {
-        timers[noti.id] = setTimeout(() => resolve(), noti.displayMS);
+    if (noti.id !== undefined && noti.displayMS !== undefined) {
+      const currentId = noti.id;
+      const currentDisplayMS = noti.displayMS;
+      return new Promise<void>((resolve) => {
+        timers[currentId] = setTimeout(() => resolve(), currentDisplayMS);
       }).then(() => {
-        dispatch(dismissNotification(noti.id));
+        dispatch(dismissNotification(currentId));
       });
     }
   };
@@ -203,7 +205,7 @@ export function addNotification(notification: INotification) {
 
 export function dismissNotification(id: string) {
   return (dispatch) =>
-    new Promise<void>((resolve, reject) => {
+    new PromiseBB<void>((resolve, reject) => {
       delete timers[id];
       delete notificationActions[id];
       dispatch(stopNotification(id));
@@ -213,7 +215,7 @@ export function dismissNotification(id: string) {
 
 export function dismissAllNotifications() {
   return (dispatch) =>
-    new Promise<void>((resolve, reject) => {
+    new PromiseBB<void>((resolve, reject) => {
       const ids = Array.from(
         new Set<string>(
           [].concat(Object.keys(timers), Object.keys(notificationActions)),
@@ -258,7 +260,7 @@ export function showDialog(
   inId?: string,
 ) {
   return (dispatch) => {
-    return new Promise<IDialogResult>((resolve, reject) => {
+    return new PromiseBB<IDialogResult>((resolve, reject) => {
       const id = inId || shortid();
       const defaultAction = actions.find((iter) => iter.default === true);
       const defaultLabel =
@@ -275,7 +277,7 @@ export function showDialog(
       );
       DialogCallbacks.instance()[id] = (actionKey: string, input?: any) => {
         const action = actions.find((iter) => iter.label === actionKey);
-        if (truthy(action.action)) {
+        if (action?.action) {
           try {
             const res: any = action.action(input);
             if (res !== undefined && res.catch !== undefined) {
@@ -298,7 +300,7 @@ export function showDialog(
         resolve({ action: actionKey, input });
       };
       DialogCallbacks.instance()[`__link-${id}`] = (idx: string) => {
-        content.links[idx].action(() => {
+        content.links?.[idx]?.action(() => {
           dispatch(dismissDialog(id));
         }, content.links[idx].id);
       };

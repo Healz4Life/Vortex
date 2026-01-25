@@ -5,6 +5,7 @@ import { defineConfig } from "eslint/config";
 import prettierConfig from "eslint-config-prettier";
 import eslintReact from "@eslint-react/eslint-plugin";
 import noCrossImportsRule from "./eslint-rules/no-cross-imports.mjs";
+import noBluebirdPromiseAliasRule from "./eslint-rules/no-bluebird-promise-alias.mjs";
 
 export default defineConfig([
   {
@@ -39,17 +40,27 @@ export default defineConfig([
       vortex: {
         rules: {
           "no-cross-imports": noCrossImportsRule,
+          "no-bluebird-promise-alias": noBluebirdPromiseAliasRule,
         },
       },
     },
     rules: {
       "vortex/no-cross-imports": "error",
+      "vortex/no-bluebird-promise-alias": "error",
     },
   },
   {
     name: "Migrating Webpack to Vite",
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          name: "process",
+          message:
+            "process is a Node.js global variable and shouldn't be imported like a module",
+        },
+      ],
     },
   },
   {

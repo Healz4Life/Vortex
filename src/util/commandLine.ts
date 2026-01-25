@@ -2,7 +2,6 @@ import program from "commander";
 import { app, ipcMain, ipcRenderer } from "electron";
 import * as fs from "fs-extra";
 import * as path from "path";
-import * as process from "process";
 import { getApplication } from "./application";
 import { log } from "./log";
 import startupSettings from "./startupSettings";
@@ -118,7 +117,7 @@ function electronIsShitArgumentSort(argv: string[]): string[] {
  * I think we are hitting walls atm with having only a single hyphen but with a word and a =
  */
 function transformEpicArguments(argv: string[]): string[] {
-  var epicParameterSwaps = {
+  const epicParameterSwaps = {
     "-AUTH_LOGIN": "--epic-auth-login",
     "-AUTH_PASSWORD": "--epic-auth-password",
     "-AUTH_TYPE": "--epic-auth-type",
@@ -131,7 +130,7 @@ function transformEpicArguments(argv: string[]): string[] {
     "-epicsandboxid": "--epic-sandboxid",
   };
 
-  var resultArr = argv.map((element) => {
+  const resultArr = argv.map((element) => {
     for (const key in epicParameterSwaps) {
       if (element.indexOf(key) !== -1) {
         return element.replace(key, epicParameterSwaps[key]);
@@ -171,12 +170,12 @@ function parseCommandline(
     .version(version)
     .option(
       "-d, --download <url>",
-      "Start downloadling the specified url " +
+      "Start downloading the specified url " +
         "(any supported protocol like nxm:, https:, ...).",
     )
     .option(
       "-i, --install <url>",
-      "Start downloadling & installing the specified url " +
+      "Start downloading & installing the specified url " +
         "(any supported protocol like nxm:, https:, ...).",
     )
     .option(
@@ -185,7 +184,7 @@ function parseCommandline(
     )
     .option(
       "--install-extension <id>",
-      "Start downloadling & installing the specified " +
+      "Start downloading & installing the specified " +
         'vortex extension. id can be "modId:<number>".',
     )
     .option(

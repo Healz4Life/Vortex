@@ -19,14 +19,13 @@ import makeCI from "../util/makeCaseInsensitive";
 import { UserCanceled } from "./CustomErrors";
 import { log } from "./log";
 
-import Promise from "bluebird";
-import type { BrowserWindow, MessageBoxOptions } from "electron";
+import PromiseBB from "bluebird";
+import type { BrowserWindow } from "electron";
 import { dialog } from "electron";
 import * as path from "path";
 import type * as Redux from "redux";
 import * as semver from "semver";
 import format from "string-template";
-import { reinterpretUntilZeros } from "ref";
 import { getErrorCode } from "../shared/errors";
 
 interface IMigration {
@@ -35,16 +34,19 @@ interface IMigration {
   maySkip: boolean;
   doQuery: boolean;
   description: string;
-  apply: (window: BrowserWindow, store: Redux.Store<IState>) => Promise<void>;
+  apply: (
+    window: BrowserWindow | null,
+    store: Redux.Store<IState>,
+  ) => PromiseBB<void>;
 }
 
 function selectDirectory(
-  window: BrowserWindow,
+  window: BrowserWindow | null,
   defaultPathPattern: string,
-): Promise<string> {
+): PromiseBB<string> {
   const defaultPath = getDownloadPath(defaultPathPattern, undefined);
   return fs
-    .ensureDirWritableAsync(defaultPath, () => Promise.resolve())
+    .ensureDirWritableAsync(defaultPath, () => PromiseBB.resolve())
     .then(() =>
       dialog.showOpenDialog(window, {
         title: "Select empty directory to store downloads",
@@ -55,7 +57,7 @@ function selectDirectory(
     .then((result) => {
       const { filePaths } = result;
       if (filePaths === undefined || filePaths.length === 0) {
-        return Promise.reject(new UserCanceled());
+        return PromiseBB.reject(new UserCanceled());
       }
       return fs
         .readdirAsync(filePaths[0])
@@ -63,9 +65,9 @@ function selectDirectory(
           const code = getErrorCode(err);
           return code === "ENOENT"
             ? fs
-                .ensureDirWritableAsync(filePaths[0], () => Promise.resolve())
+                .ensureDirWritableAsync(filePaths[0], () => PromiseBB.resolve())
                 .then(() => [])
-            : Promise.reject(err);
+            : PromiseBB.reject(err);
         })
         .then((files) => {
           if (files.length > 0) {
@@ -75,22 +77,22 @@ function selectDirectory(
             );
             return selectDirectory(window, defaultPathPattern);
           } else {
-            return Promise.resolve(filePaths[0]);
+            return PromiseBB.resolve(filePaths[0]);
           }
         });
     });
 }
 
-function transferPath(from: string, to: string): Promise<void> {
-  return Promise.join(
+function transferPath(from: string, to: string): PromiseBB<void> {
+  return PromiseBB.join(
     fs.statAsync(from),
     fs.statAsync(to),
     (statOld: fs.Stats, statNew: fs.Stats) =>
-      Promise.resolve(statOld.dev === statNew.dev),
+      PromiseBB.resolve(statOld.dev === statNew.dev),
   )
     .then((sameVolume: boolean) => {
       const func = sameVolume ? fs.renameAsync : fs.copyAsync;
-      return Promise.resolve(fs.readdirAsync(from))
+      return PromiseBB.resolve(fs.readdirAsync(from))
         .map((fileName: string) =>
           func(path.join(from, fileName), path.join(to, fileName)).catch(
             (err) =>
@@ -102,24 +104,26 @@ function transferPath(from: string, to: string): Promise<void> {
                     path.join(from, fileName),
                     path.join(to, fileName),
                   )
-                : Promise.reject(err),
+                : PromiseBB.reject(err),
           ),
         )
         .then(() => fs.removeAsync(from));
     })
     .catch((err) =>
-      getErrorCode(err) === "ENOENT" ? Promise.resolve() : Promise.reject(err),
+      getErrorCode(err) === "ENOENT"
+        ? PromiseBB.resolve()
+        : PromiseBB.reject(err),
     );
 }
 
 function dialogProm(
-  window: BrowserWindow,
+  window: BrowserWindow | null,
   type: string,
   title: string,
   message: string,
   options: string[],
-): Promise<string> {
-  return Promise.resolve(
+): PromiseBB<string> {
+  return PromiseBB.resolve(
     dialog.showMessageBox(window, {
       type: type as "none" | "info" | "error" | "question" | "warning",
       buttons: options,
@@ -133,7 +137,7 @@ function dialogProm(
 function forceLogoutForOauth_1_9(
   window: BrowserWindow,
   store: Redux.Store<IState>,
-): Promise<void> {
+): PromiseBB<void> {
   const state = store.getState();
 
   const apiKey = state.confidential.account?.["nexus"]?.["APIKey"];
@@ -157,7 +161,7 @@ function forceLogoutForOauth_1_9(
       "warn",
       "forceLogoutForOauth_1_9() not logged in so skipping migration",
     );
-    return;
+    return PromiseBB.resolve();
   }
 
   // this is going to force a logout and set the ForceLogout flag in the state so that the nexus_integration extension can pick up the change
@@ -168,13 +172,13 @@ function forceLogoutForOauth_1_9(
 
   log("info", "forceLogoutForOauth_1_9() should be logged out");
 
-  return;
+  return PromiseBB.resolve();
 }
 
 function moveDownloads_0_16(
   window: BrowserWindow,
   store: Redux.Store<IState>,
-): Promise<void> {
+): PromiseBB<void> {
   const state = store.getState();
   log("info", "importing downloads from pre-0.16.0 version");
   return dialogProm(
@@ -188,7 +192,7 @@ function moveDownloads_0_16(
     .then(() => selectDirectory(window, state.settings.downloads.path))
     .then((downloadPath) => {
       store.dispatch(setDownloadPath(downloadPath));
-      return Promise.map(
+      return PromiseBB.map(
         Object.keys(state.settings.gameMode.discovered),
         (gameId) => {
           const resolvedPath = path.join(downloadPath, gameId);
@@ -205,17 +209,17 @@ function moveDownloads_0_16(
               ),
             );
         },
-      ).then(() => null);
+      ).then(() => {});
     });
 }
 
 function updateInstallPath_0_16(
   window: BrowserWindow,
   store: Redux.Store<IState>,
-): Promise<void> {
+): PromiseBB<void> {
   const state = store.getState();
   const { paths } = state.settings.mods as any;
-  return Promise.map(Object.keys(paths || {}), (gameId) => {
+  return PromiseBB.map(Object.keys(paths || {}), (gameId) => {
     const base = resolvePath("base", paths, gameId);
     log(
       "info",
@@ -235,8 +239,8 @@ function updateInstallPath_0_16(
         ),
       ),
     );
-    return Promise.resolve();
-  }).then(() => null);
+    return PromiseBB.resolve();
+  }).then(() => {});
 }
 
 const migrations: IMigration[] = [
@@ -270,13 +274,13 @@ const migrations: IMigration[] = [
 ];
 
 function queryMigration(
-  window: BrowserWindow,
+  window: BrowserWindow | null,
   migration: IMigration,
-): Promise<boolean> {
+): PromiseBB<boolean> {
   if (!migration.doQuery) {
-    return Promise.resolve(true);
+    return PromiseBB.resolve(true);
   }
-  return new Promise((resolve, reject) => {
+  return new PromiseBB((resolve, reject) => {
     const buttons = migration.maySkip
       ? ["Cancel", "Skip", "Continue"]
       : ["Cancel", "Continue"];
@@ -284,7 +288,7 @@ function queryMigration(
       .showMessageBox(window, {
         type: "info",
         buttons,
-        title: "Migration neccessary",
+        title: "Migration necessary",
         message: migration.description,
         noLink: true,
       })
@@ -297,7 +301,10 @@ function queryMigration(
   });
 }
 
-function queryContinue(window: BrowserWindow, err: Error): Promise<void> {
+function queryContinue(
+  window: BrowserWindow | null,
+  err: Error,
+): PromiseBB<void> {
   return dialogProm(
     window,
     "error",
@@ -306,33 +313,35 @@ function queryContinue(window: BrowserWindow, err: Error): Promise<void> {
       err.stack || err.message,
     ["Ignore", "Quit"],
   ).then((selection) =>
-    selection === "Ignore" ? Promise.resolve() : Promise.reject(err),
+    selection === "Ignore" ? PromiseBB.resolve() : PromiseBB.reject(err),
   );
 }
 
 function migrate(
   store: Redux.Store<IState>,
-  window: BrowserWindow,
-): Promise<void> {
+  window: BrowserWindow | null,
+): PromiseBB<void> {
   const state = store.getState();
   const oldVersion = state.app.appVersion || "0.0.0";
   const neccessaryMigrations = migrations
     .filter((mig) => semver.lt(oldVersion, mig.minVersion))
     .filter((mig) => state.app.migrations.indexOf(mig.id) === -1);
-  return Promise.each(neccessaryMigrations, (migration) =>
+  return PromiseBB.each(neccessaryMigrations, (migration) =>
     queryMigration(window, migration)
       .then((proceed: boolean) =>
-        proceed ? migration.apply(window, store) : Promise.resolve(),
+        proceed ? migration.apply(window, store) : PromiseBB.resolve(),
       )
       .then(() => {
         store.dispatch(completeMigration(migration.id));
-        return Promise.resolve();
+        return PromiseBB.resolve();
       })
-      .catch(
-        (err) => !(err instanceof UserCanceled),
-        (err: Error) => queryContinue(window, err),
-      ),
-  ).then(() => null);
+      .catch((err: Error) => {
+        if (err instanceof UserCanceled) {
+          throw err;
+        }
+        return queryContinue(window, err);
+      }),
+  ).then(() => {});
 }
 
 export default migrate;
