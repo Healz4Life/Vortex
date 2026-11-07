@@ -1,6 +1,6 @@
 import * as path from "node:path";
 
-import { GameId } from "@vortex/shared";
+import { GameId, VortexModStagingFolder } from "@vortex/shared";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { IExtensionApi } from "@/types/IExtensionContext";
@@ -10,9 +10,11 @@ import { FlagService } from "../../FlagService";
 import { getBatchContext, type IBatchContext } from "../../util/BatchContext";
 import { getCollectionActiveSession } from "../../util/collectionInstallSessionSelectors";
 import { UserCanceled } from "../../util/CustomErrors";
+import { emitManualInstallerEvent } from "../analytics/utils/manualInstallerEvent";
 import { setManualInstallerPreferences } from "../gamemode_management/actions/persistent";
 import { isTierZeroManagedGame, tierZeroGameFor } from "../gamemode_management/tiered/tierZero";
 import {
+  commonTopFolder,
   createManualInstaller,
   INSTALL_DESTINATION_ATTRIBUTE,
   INSTALL_SKIP_TOP_FOLDER_ATTRIBUTE,
@@ -33,6 +35,7 @@ vi.mock("../../util/collectionInstallSessionSelectors", () => ({
   getCollectionActiveSession: vi.fn(),
 }));
 vi.mock("../../util/BatchContext", () => ({ getBatchContext: vi.fn() }));
+vi.mock("../analytics/utils/manualInstallerEvent", () => ({ emitManualInstallerEvent: vi.fn() }));
 vi.mock("./manualInstallerQueue", () => ({ requestManualInstallerDestination: vi.fn() }));
 vi.mock("../nexus_integration/util/UIDs", () => ({
   makeModAndFileUIDs: (game: string, mod: string, file: string) =>
@@ -53,16 +56,25 @@ const answer = (overrides: Partial<IManualInstallerAnswer> = {}): IManualInstall
   ...overrides,
 });
 
-const makeApi = (dialogAnswer?: IManualInstallerAnswer) => {
+const makeApi = (
+  dialogAnswer?: IManualInstallerAnswer,
+  state: unknown = { settings: { gameMode: { discovered: {} } } },
+) => {
   vi.mocked(requestManualInstallerDestination).mockResolvedValue(dialogAnswer);
   const emit = vi.fn();
   const dispatch = vi.fn();
+  const handlers = new Map<string, (...args: string[]) => void>();
+  const on = vi.fn((event: string, handler: (...args: string[]) => void) => {
+    handlers.set(event, handler);
+  });
   const api = {
-    getState: () => ({}),
+    getState: () => state,
     store: { dispatch },
-    events: { emit },
+    events: { emit, on },
   } as unknown as IExtensionApi;
-  return { api, emit, dispatch };
+  /** announces the successful install of an archive, like InstallManager does */
+  const didInstall = (archiveId: string) => handlers.get("did-install-mod")?.("game", archiveId);
+  return { api, emit, dispatch, didInstall };
 };
 
 const makeBatch = (itemCount: number): IBatchContext => {
@@ -89,6 +101,8 @@ interface IInstallOptions {
   modReference?: IModReference;
   archiveId?: string;
   files?: string[];
+  stagingFolder?: VortexModStagingFolder;
+  previousStagingFolder?: VortexModStagingFolder;
 }
 
 const install = (installer: ReturnType<typeof createManualInstaller>, opts: IInstallOptions = {}) =>
@@ -104,6 +118,8 @@ const install = (installer: ReturnType<typeof createManualInstaller>, opts: IIns
       previousAttributes: opts.previousAttributes,
       modReference: opts.modReference,
       archiveId: opts.archiveId,
+      stagingFolder: opts.stagingFolder,
+      previousStagingFolder: opts.previousStagingFolder,
     },
   );
 
@@ -124,6 +140,7 @@ beforeEach(() => {
   vi.mocked(getCollectionActiveSession).mockReset();
   vi.mocked(getBatchContext).mockReset();
   vi.mocked(requestManualInstallerDestination).mockReset();
+  vi.mocked(emitManualInstallerEvent).mockReset();
 });
 
 describe("normalizeDestination", () => {
@@ -144,6 +161,27 @@ describe("normalizeDestination", () => {
     expect(normalizeDestination("/etc")).toBeUndefined();
     expect(normalizeDestination("\\Windows")).toBeUndefined();
     expect(normalizeDestination("C:\\Windows")).toBeUndefined();
+  });
+});
+
+describe("commonTopFolder", () => {
+  test("is the folder every entry is in", () => {
+    expect(commonTopFolder([`Top${path.sep}`, path.join("Top", "a.dll")])).toBe("Top");
+    expect(commonTopFolder([path.join("Top", "a.dll"), path.join("Top", "b", "c.dll")])).toBe(
+      "Top",
+    );
+  });
+
+  test("is undefined when a file is at the archive root", () => {
+    expect(commonTopFolder([path.join("Top", "a.dll"), "readme.txt"])).toBeUndefined();
+  });
+
+  test("is undefined when the entries are in different folders", () => {
+    expect(commonTopFolder([path.join("A", "a.dll"), path.join("B", "b.dll")])).toBeUndefined();
+  });
+
+  test("is undefined for no entries", () => {
+    expect(commonTopFolder([])).toBeUndefined();
   });
 });
 
@@ -276,7 +314,7 @@ describe("install", () => {
 });
 
 describe("per-game preferences", () => {
-  test("the dialog preselects the default folder and offers the top folder and previews", async () => {
+  test("the dialog preselects the default folder and offers the top folder", async () => {
     withPreferences({ defaultFolder: "Mods" });
     const { api } = makeApi(answer({ folder: "Mods" }));
     await install(createManualInstaller(api), { files: folderFiles });
@@ -286,8 +324,90 @@ describe("per-game preferences", () => {
       expect.objectContaining({
         defaultFolder: "Mods",
         topFolder: "Top",
-        previewFiles: [path.join("Top", "a.dll"), path.join("Top", "b", "c.dll")],
       }),
+    );
+  });
+
+  test("the dialog gets the game's install folder", async () => {
+    const { api } = makeApi(answer(), {
+      settings: { gameMode: { discovered: { game: { path: path.join("C:", "Games", "Game") } } } },
+    });
+    await install(createManualInstaller(api));
+
+    expect(requestManualInstallerDestination).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({ gameFolder: path.join("C:", "Games", "Game") }),
+    );
+  });
+
+  test("the dialog gets an empty install folder when the game isn't discovered", async () => {
+    const { api } = makeApi(answer());
+    await install(createManualInstaller(api));
+
+    expect(requestManualInstallerDestination).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({ gameFolder: "" }),
+    );
+  });
+
+  test("the dialog gets every entry of the archive with its kind, directories included", async () => {
+    const entries = [`Top${path.sep}`, path.join("Top", "a.dll"), path.join("Top", "b", "c.dll")];
+    const { api } = makeApi(answer());
+    await install(createManualInstaller(api), { files: entries });
+
+    expect(requestManualInstallerDestination).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({
+        files: [
+          { path: "Top", kind: "directory" },
+          { path: "Top/a.dll", kind: "file" },
+          { path: "Top/b/c.dll", kind: "file" },
+        ],
+      }),
+    );
+  });
+
+  test("the installer keeps the archive's own names for the files it copies", async () => {
+    const entries = [path.join("Top", "a.dll")];
+    const { api } = makeApi(answer({ folder: "" }));
+    const result = await install(createManualInstaller(api), { files: entries });
+
+    expect(copiesOf(result)[0].source).toBe(entries[0]);
+  });
+
+  test("the dialog gets the staging folders of the mod and of the one it replaces", async () => {
+    const stagingFolder = VortexModStagingFolder("new-mod");
+    const previousStagingFolder = VortexModStagingFolder("old-mod");
+    const { api } = makeApi(answer());
+    await install(createManualInstaller(api), { stagingFolder, previousStagingFolder });
+
+    expect(requestManualInstallerDestination).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({ ownStagingFolders: [stagingFolder, previousStagingFolder] }),
+    );
+  });
+
+  test("the dialog gets a staging folder once when the mod reuses its previous one", async () => {
+    const stagingFolder = VortexModStagingFolder("same-mod");
+    const { api } = makeApi(answer());
+    await install(createManualInstaller(api), {
+      stagingFolder,
+      previousStagingFolder: stagingFolder,
+    });
+
+    expect(requestManualInstallerDestination).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({ ownStagingFolders: [stagingFolder] }),
+    );
+  });
+
+  test("the dialog gets no staging folders when the installer isn't told any", async () => {
+    const { api } = makeApi(answer());
+    await install(createManualInstaller(api));
+
+    expect(requestManualInstallerDestination).toHaveBeenCalledWith(
+      api,
+      expect.objectContaining({ ownStagingFolders: [] }),
     );
   });
 
@@ -462,5 +582,97 @@ describe("analytics", () => {
     await install(createManualInstaller(api), { modReference: reference });
 
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe("manual installer telemetry", () => {
+  test("a confirmed dialog is reported once the install finished", async () => {
+    const { api, didInstall } = makeApi(answer({ folder: "Foo" }));
+    await install(createManualInstaller(api), { archiveId: "a" });
+
+    expect(emitManualInstallerEvent).not.toHaveBeenCalled();
+    didInstall("a");
+    expect(emitManualInstallerEvent).toHaveBeenCalledWith(api, {
+      gameId: "game",
+      destination: "Foo",
+      modReference: undefined,
+    });
+  });
+
+  test("it is reported only once", async () => {
+    const { api, didInstall } = makeApi(answer({ folder: "Foo" }));
+    await install(createManualInstaller(api), { archiveId: "a" });
+
+    didInstall("a");
+    didInstall("a");
+
+    expect(emitManualInstallerEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("an install that never finished reports nothing", async () => {
+    const { api, didInstall } = makeApi(answer({ folder: "Foo" }));
+    await install(createManualInstaller(api), { archiveId: "a" });
+
+    didInstall("other");
+
+    expect(emitManualInstallerEvent).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["unattended", { unattended: true }],
+    ["a reused destination", { previousAttributes: { [INSTALL_DESTINATION_ATTRIBUTE]: "Foo" } }],
+  ])("no dialog means nothing is reported (%s)", async (_, opts) => {
+    const { api, didInstall } = makeApi();
+    await install(createManualInstaller(api), { ...opts, archiveId: "a" });
+    didInstall("a");
+
+    expect(emitManualInstallerEvent).not.toHaveBeenCalled();
+  });
+
+  test("a destination reused through don't ask again reports nothing", async () => {
+    withPreferences({ defaultFolder: "Mods", dontAskAgain: true });
+    const { api, didInstall } = makeApi();
+    await install(createManualInstaller(api), { archiveId: "a" });
+    didInstall("a");
+
+    expect(emitManualInstallerEvent).not.toHaveBeenCalled();
+  });
+
+  test("a cancelled dialog reports nothing", async () => {
+    const { api, didInstall } = makeApi(undefined);
+
+    await expect(install(createManualInstaller(api), { archiveId: "a" })).rejects.toBeInstanceOf(
+      UserCanceled,
+    );
+    didInstall("a");
+
+    expect(emitManualInstallerEvent).not.toHaveBeenCalled();
+  });
+
+  test("only the dialog's mod is reported, not the later ones reusing its folder", async () => {
+    vi.mocked(getBatchContext).mockReturnValue(makeBatch(3));
+    const { api, didInstall } = makeApi(answer({ folder: "Foo", useForAll: true }));
+    const installer = createManualInstaller(api);
+
+    await install(installer, { archiveId: "a" });
+    await install(installer, { archiveId: "b" });
+    didInstall("a");
+    didInstall("b");
+
+    expect(emitManualInstallerEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("a pick that never finished is not reported by a later reinstall of the archive", async () => {
+    const { api, didInstall } = makeApi(answer({ folder: "Foo" }));
+    const installer = createManualInstaller(api);
+
+    await install(installer, { archiveId: "a" });
+    await install(installer, {
+      archiveId: "a",
+      previousAttributes: { [INSTALL_DESTINATION_ATTRIBUTE]: "Foo" },
+    });
+    didInstall("a");
+
+    expect(emitManualInstallerEvent).not.toHaveBeenCalled();
   });
 });
